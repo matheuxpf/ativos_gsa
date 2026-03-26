@@ -1,0 +1,5 @@
+{
+  "name": "GSA Controle de Ativos",
+  "description": "Sistema de controle de ativos (notebooks, celulares) para GSA Alimentos com rastreabilidade, controle de movimentações em lote e dashboards gerenciais.",
+  "requestFramePermissions": []
+}
