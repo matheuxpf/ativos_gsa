@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Asset, OwnerType, Movement, AssetStatus, Employee } from '../types';
+import { Asset, Employee, Movement, AssetStatus, OwnerType } from '../types';
+import { X, ArrowRightLeft, Monitor, Smartphone, Box, Server, Package } from 'lucide-react';
 import { STOCK_OWNER_ID, STOCK_OWNER_NAME } from '../constants';
-import { X, Save, AlertCircle } from 'lucide-react';
 
 interface MovementFormProps {
   selectedAssets: Asset[];
@@ -11,101 +11,133 @@ interface MovementFormProps {
 }
 
 export const MovementForm: React.FC<MovementFormProps> = ({ selectedAssets, employees, onClose, onSubmit }) => {
-  const [targetType, setTargetType] = useState<OwnerType>(OwnerType.FUNCIONARIO);
-  const [targetId, setTargetId] = useState<string>('');
-  const [reason, setReason] = useState<string>('');
-  const [observations, setObservations] = useState<string>('');
-  // Padrão: Em Uso. Mas se for para manutenção, usuário muda.
+  const [targetOwnerId, setTargetOwnerId] = useState<string>('');
   const [newStatus, setNewStatus] = useState<AssetStatus>(AssetStatus.EM_USO);
+  const [reason, setReason] = useState('');
 
-  const canSubmit = targetId && reason && selectedAssets.length > 0;
+  // Define o ícone correto baseado no tipo do ativo
+  const getIcon = (type: string) => {
+    const t = (type || '').toUpperCase();
+    if (t === 'NOTEBOOK') return <Monitor size={16} className="text-slate-500" />;
+    if (t === 'DESKTOP') return <Box size={16} className="text-slate-500" />;
+    if (t === 'CELULAR' || t === 'MOBILE') return <Smartphone size={16} className="text-slate-500" />;
+    if (t === 'SERVIDOR' || t === 'SERVER') return <Server size={16} className="text-slate-500" />;
+    return <Package size={16} className="text-slate-500" />;
+  };
+
+  // 🕵️‍♂️ A MÁGICA DA EXIBIÇÃO PARA O GESTOR
+  const getDisplayName = (asset: Asset) => {
+    const type = (asset.type || '').toUpperCase();
+    if (['CELULAR', 'MOBILE', 'SMARTPHONE'].includes(type)) {
+      return `${type} (${asset.primaryId || 'Sem IMEI'})`;
+    }
+    // Prioriza absolutamente a Tag. Só mostra o MAC se o equipamento não tiver sido etiquetado.
+    return `${type} (${asset.assetTag || asset.primaryId || 'S/ IDENTIFICAÇÃO'})`;
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canSubmit) return;
+    if (!targetOwnerId) return alert('Selecione um destino válido!');
 
-    let targetName = '';
-    if (targetType === OwnerType.FUNCIONARIO) {
-      const emp = employees.find(e => e.id === targetId);
-      targetName = emp ? emp.name : 'Desconhecido';
-    } else if (targetType === OwnerType.ESTOQUE) {
-      targetName = STOCK_OWNER_NAME;
+    let ownerType = OwnerType.FUNCIONARIO;
+    let ownerName = '';
+
+    if (targetOwnerId === STOCK_OWNER_ID) {
+      ownerType = OwnerType.ESTOQUE;
+      ownerName = STOCK_OWNER_NAME;
     } else {
-      targetName = targetId; 
+      const emp = employees.find(e => e.id === targetOwnerId);
+      if (emp) ownerName = emp.name;
     }
 
-    const movementTemplate: Partial<Movement> = {
-      toOwnerType: targetType, toOwnerId: targetId, toOwnerName: targetName,
-      reason, observations, registeredBy: 'Admin', date: new Date().toISOString()
-    };
-
-    const movementsPayload = selectedAssets.map(asset => ({
-      ...movementTemplate,
+    const movements: Partial<Movement>[] = selectedAssets.map(asset => ({
       assetId: asset.id,
-      fromOwnerType: asset.currentOwnerType,
       fromOwnerId: asset.currentOwnerId,
+      fromOwnerType: asset.currentOwnerType as OwnerType,
       fromOwnerName: asset.currentOwnerName,
+      toOwnerId: targetOwnerId,
+      toOwnerType: ownerType,
+      toOwnerName: ownerName,
+      reason: reason,
+      date: new Date().toISOString()
     }));
 
-    onSubmit(movementsPayload, newStatus, { type: targetType, id: targetId, name: targetName });
+    onSubmit(movements, newStatus, { type: ownerType, id: targetOwnerId, name: ownerName });
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
-        <div className="bg-gsa-blue text-white p-4 flex justify-between items-center">
-          <div><h2 className="text-xl font-bold">Nova Movimentação</h2><p className="text-sm text-blue-200">Transferindo {selectedAssets.length} item(ns)</p></div>
-          <button onClick={onClose} className="hover:bg-blue-700 p-1 rounded transition-colors"><X size={24} /></button>
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
+        
+        {/* Cabeçalho */}
+        <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+          <h3 className="font-black text-lg text-slate-800 flex items-center gap-2">
+            <ArrowRightLeft size={20} className="text-gsa-blue" /> 
+            Movimentar Lote ({selectedAssets.length} ativos)
+          </h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-red-500 transition-colors"><X size={20}/></button>
         </div>
-        <div className="p-6 overflow-y-auto flex-1">
-          <div className="mb-6 bg-slate-50 p-3 rounded-lg border border-slate-200">
-            <h4 className="text-xs font-bold text-slate-500 uppercase mb-2">Itens Selecionados</h4>
-            <div className="flex flex-wrap gap-2">{selectedAssets.map(asset => (<span key={asset.id} className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold bg-white border border-slate-200 text-slate-700 shadow-sm">{asset.type} {asset.brand} <span className="text-slate-400 ml-1 font-normal">({asset.primaryId})</span></span>))}</div>
+        
+        {/* Formulário */}
+        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto flex-1 space-y-5">
+          
+          {/* Lista de Ativos Inteligente */}
+          <div>
+            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Ativos Selecionados</label>
+            <div className="max-h-36 overflow-y-auto space-y-2 pr-2 scrollbar-thin scrollbar-thumb-slate-200">
+              {selectedAssets.map(asset => (
+                <div key={asset.id} className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                  <div className="bg-white p-2 border border-slate-200 rounded shadow-sm">
+                    {getIcon(asset.type)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-bold text-slate-700 text-sm truncate">
+                      {getDisplayName(asset)}
+                    </div>
+                    <div className="text-[10px] text-slate-500 truncate mt-0.5">
+                      Atual: <span className="font-bold">{asset.currentOwnerName || 'Estoque'}</span> | Status: {asset.status}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-1">Tipo de Destino</label>
-                <select className="w-full border-slate-300 rounded-lg p-2 border" value={targetType} onChange={(e) => {
-                    setTargetType(e.target.value as OwnerType); setTargetId('');
-                    // Auto-sugestão de status baseada no destino
-                    if(e.target.value === OwnerType.ESTOQUE) setNewStatus(AssetStatus.EM_ESTOQUE);
-                    else if(e.target.value === OwnerType.MANUTENCAO) setNewStatus(AssetStatus.EM_MANUTENCAO);
-                    else setNewStatus(AssetStatus.EM_USO);
-                  }}>
-                  {Object.values(OwnerType).map(type => <option key={type} value={type}>{type}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-1">Destinatário</label>
-                {targetType === OwnerType.FUNCIONARIO ? (
-                  <select className="w-full border-slate-300 rounded-lg p-2 border" value={targetId} onChange={(e) => setTargetId(e.target.value)} required><option value="">Selecione...</option>{employees.filter(e => e.status === 'Ativo').map(emp => <option key={emp.id} value={emp.id}>{emp.name} ({emp.role})</option>)}</select>
-                ) : targetType === OwnerType.ESTOQUE ? (
-                  <select className="w-full border-slate-300 rounded-lg p-2 border" value={targetId} onChange={(e) => setTargetId(e.target.value)} required><option value="">Confirme...</option><option value={STOCK_OWNER_ID}>{STOCK_OWNER_NAME}</option></select>
-                ) : (
-                  <input type="text" className="w-full border-slate-300 rounded-lg p-2 border" placeholder="Nome ou ID externo" value={targetId} onChange={(e) => setTargetId(e.target.value)} required />
-                )}
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                 <label className="block text-sm font-bold text-slate-700 mb-1">Novo Status Operacional</label>
-                 <select className="w-full border-slate-300 rounded-lg p-2 border" value={newStatus} onChange={(e) => setNewStatus(e.target.value as AssetStatus)}>
-                   {Object.values(AssetStatus).map(s => <option key={s} value={s}>{s}</option>)}
-                 </select>
-              </div>
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-1">Motivo</label>
-                <select className="w-full border-slate-300 rounded-lg p-2 border" value={reason} onChange={(e) => setReason(e.target.value)} required><option value="">Selecione...</option><option value="Admissão">Admissão</option><option value="Demissão">Demissão</option><option value="Troca/Upgrade">Troca/Upgrade</option><option value="Manutenção">Envio Manutenção</option><option value="Retorno">Retorno Manutenção</option><option value="Empréstimo">Empréstimo</option><option value="Outro">Outro</option></select>
-              </div>
-            </div>
 
-            <div><label className="block text-sm font-bold text-slate-700 mb-1">Observações</label><textarea className="w-full border-slate-300 rounded-lg p-2 border" rows={3} value={observations} onChange={(e) => setObservations(e.target.value)} /></div>
-            <div className="bg-blue-50 p-3 rounded-md flex items-start text-sm text-blue-700"><AlertCircle className="mr-2 flex-shrink-0 mt-0.5" size={16} /><p>O status operacional será atualizado, mas o estado físico (Novo/Usado) do bem será mantido.</p></div>
-          </form>
+          <div>
+            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Novo Destino</label>
+            <select required className="w-full border border-slate-300 rounded-lg p-2.5 text-sm bg-white focus:ring-2 focus:ring-gsa-blue focus:outline-none" value={targetOwnerId} onChange={e => setTargetOwnerId(e.target.value)}>
+              <option value="">Selecione o novo responsável...</option>
+              <optgroup label="Estoque">
+                <option value={STOCK_OWNER_ID}>{STOCK_OWNER_NAME}</option>
+              </optgroup>
+              <optgroup label="Funcionários">
+                {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+              </optgroup>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Novo Status do Ativo</label>
+            <select required className="w-full border border-slate-300 rounded-lg p-2.5 text-sm bg-white focus:ring-2 focus:ring-gsa-blue focus:outline-none" value={newStatus} onChange={e => setNewStatus(e.target.value as AssetStatus)}>
+              {Object.values(AssetStatus).map(status => (
+                <option key={status} value={status}>{status}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Motivo da Movimentação (Opcional)</label>
+            <textarea rows={2} className="w-full border border-slate-300 rounded-lg p-2.5 text-sm bg-white focus:ring-2 focus:ring-gsa-blue focus:outline-none resize-none" value={reason} onChange={e => setReason(e.target.value)} placeholder="Ex: Entrega de equipamento novo, manutenção..." />
+          </div>
+
+        </form>
+        
+        {/* Rodapé */}
+        <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex justify-end gap-3">
+          <button type="button" onClick={onClose} className="px-5 py-2.5 text-slate-600 font-bold hover:bg-slate-200 rounded-lg transition-colors">Cancelar</button>
+          <button type="submit" onClick={handleSubmit} className="px-5 py-2.5 bg-green-600 text-white font-black rounded-lg shadow-md hover:bg-green-700 transition-colors">Confirmar</button>
         </div>
-        <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-3"><button onClick={onClose} className="px-4 py-2 text-slate-500 font-bold hover:text-slate-800">Cancelar</button><button onClick={handleSubmit} disabled={!canSubmit} className={`px-4 py-2 rounded-lg text-white font-bold flex items-center ${canSubmit ? 'bg-gsa-green hover:bg-green-600 shadow-md' : 'bg-slate-300 cursor-not-allowed'}`}><Save size={18} className="mr-2" /> Confirmar</button></div>
+
       </div>
     </div>
   );

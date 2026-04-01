@@ -14,6 +14,27 @@ import { LogsView } from './components/LogsView';
 import { MovementForm } from './components/MovementForm';
 import { TeamView } from './components/TeamView';
 
+// 🕵️‍♂️ FUNÇÃO RASTREADORA E BLINDADA CENTRALIZADA
+// Ela procura as chaves tanto do padrão do Banco (snake_case) quanto do Front (camelCase)
+// 🕵️‍♂️ FUNÇÃO RASTREADORA E BLINDADA CENTRALIZADA
+const formatAssetForAudit = (asset: any) => {
+  const type = (asset.type || '').toUpperCase().trim();
+  const nomeDaMaquina = asset.assetTag || asset.asset_tag; 
+  const macImei = asset.primaryId || asset.primary_id;
+  
+  // Validação: Só inclui a marca se ela existir de verdade e não for um texto genérico
+  const temMarca = asset.brand && asset.brand !== 'Sem Marca' && asset.brand !== 'Genérica';
+  const brandString = temMarca ? ` ${asset.brand}` : '';
+
+  // Regra Celular
+  if (['CELULAR', 'MOBILE', 'SMARTPHONE'].includes(type)) {
+    return `${type}${brandString} (IMEI/Serial: ${macImei || 'N/A'})`;
+  }
+
+  // Regra universal (Servidor, Note, Desktop)
+  return `${type}${brandString} (${nomeDaMaquina || 'S/ NOME'})`;
+};
+
 export default function App() {
   const [currentView, setCurrentView] = useState<ViewState>('DASHBOARD');
   const [searchQuery, setSearchQuery] = useState('');
@@ -52,7 +73,7 @@ export default function App() {
       setEmployees(empRes.data.map(e => ({
         ...e,
         teamId: e.team_id,
-        status: e.status || 'Ativo' // Garante que não fique nulo no front
+        status: e.status || 'Ativo' 
       })));
     }
     
@@ -66,7 +87,12 @@ export default function App() {
     if (rolesRes.data) {
       setRoles(rolesRes.data.map(r => ({
         ...r,
-        teamId: r.team_id
+        teamId: r.team_id,
+        reqNotebook: r.req_notebook || false,
+        reqDesktop: r.req_desktop || false,
+        reqMobile: r.req_mobile || false,
+        reqSim: r.req_sim || false,
+        status: r.status || 'ATIVA'
       })));
     }
   };
@@ -93,7 +119,8 @@ export default function App() {
     
     if (data) {
       setAssets([...assets, { ...asset, id: data.id }]);
-      await registerLog('CREATE', 'ASSET', `Ativo cadastrado: ${asset.type} ${asset.brand} (SN: ${asset.primaryId})`);
+      // Aplicando a formatação limpa no momento do cadastro!
+      await registerLog('CREATE', 'ASSET', `Ativo cadastrado: ${formatAssetForAudit(asset)}`);
     }
   };
 
@@ -117,19 +144,28 @@ export default function App() {
     if (error) { alert("Erro ao atualizar Ativo: " + error.message); return; }
     
     setAssets(assets.map(a => a.id === asset.id ? asset : a));
-    await registerLog('UPDATE', 'ASSET', `Dados do ativo atualizados: ${asset.primaryId}`);
+    // Aplicando a formatação limpa no momento da edição!
+    await registerLog('UPDATE', 'ASSET', `Dados do ativo atualizados: ${formatAssetForAudit(asset)}`);
   };
 
   const handleDeleteAsset = async (id: string) => {
+    // 1. Pega o objeto antes de excluir
     const assetToDelete = assets.find(a => a.id === id);
+    if (!assetToDelete) return;
+
+    // 2. Formata com a inteligência centralizada
+    const nomeAmigavel = formatAssetForAudit(assetToDelete);
+
+    // 3. Deleta do banco
     const { error } = await supabase.from('assets').delete().eq('id', id);
     if (error) { alert("Erro ao excluir Ativo: " + error.message); return; }
     
     setAssets(assets.filter(a => a.id !== id));
-    await registerLog('DELETE', 'ASSET', `Ativo excluído: ${assetToDelete?.primaryId}`);
+    
+    // 4. Grava no log usando registerLog
+    await registerLog('DELETE', 'ASSET', `Ativo excluído: ${nomeAmigavel}`);
   };
 
-  // --- ATUALIZADO: Usando status em vez de active ---
   const handleAddEmployee = async (employee: Employee) => {
     const dbPayload = {
       name: employee.name,
@@ -219,7 +255,12 @@ export default function App() {
       code: role.code,
       description: role.description,
       region: role.region,
-      team_id: role.teamId
+      team_id: role.teamId,
+      req_notebook: role.reqNotebook || false,
+      req_desktop: role.reqDesktop || false,
+      req_mobile: role.reqMobile || false,
+      req_sim: role.reqSim || false,
+      status: role.status || 'ATIVA'
     };
 
     const { data, error } = await supabase.from('roles').insert([dbPayload]).select().single();
@@ -236,7 +277,12 @@ export default function App() {
       code: role.code,
       description: role.description,
       region: role.region,
-      team_id: role.teamId
+      team_id: role.teamId,
+      req_notebook: role.reqNotebook || false,
+      req_desktop: role.reqDesktop || false,
+      req_mobile: role.reqMobile || false,
+      req_sim: role.reqSim || false,
+      status: role.status || 'ATIVA'
     };
 
     const { error } = await supabase.from('roles').update(dbPayload).eq('id', role.id);

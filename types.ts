@@ -38,7 +38,17 @@ export interface Team {
 }
 
 export interface Role {
-  id: string; code: string; description: string; region: Region; teamId?: string; status: 'ATIVA' | 'INATIVA' | 'VAGA_ABERTA' | 'OCUPADA';
+  id: string;
+  code: string;
+  description: string;
+  region: string;
+  teamId?: string;
+  // NOVOS CAMPOS DO KIT PADRÃO E STATUS
+  reqNotebook?: boolean;
+  reqDesktop?: boolean;
+  reqMobile?: boolean;
+  reqSim?: boolean;
+  status?: string;
 }
 
 export interface Asset {
