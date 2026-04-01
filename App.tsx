@@ -251,8 +251,25 @@ export default function App() {
   };
 
   const handleAddRole = async (role: Role) => {
+    // Lógica de Autonumeração: Calcula o próximo código se for uma criação
+    let codigoGerado = role.code;
+    
+    if (!codigoGerado) {
+      let maiorNumero = 0;
+      roles.forEach(r => {
+        // Extrai apenas os números dos códigos existentes (ex: de "VG-0015" extrai 15)
+        const match = r.code?.match(/\d+/);
+        if (match) {
+          const num = parseInt(match[0], 10);
+          if (num > maiorNumero) maiorNumero = num;
+        }
+      });
+      // Monta o novo código somando 1 e colocando zeros à esquerda (ex: VG-0016)
+      codigoGerado = `VG-${String(maiorNumero + 1).padStart(4, '0')}`;
+    }
+
     const dbPayload = {
-      code: role.code,
+      code: codigoGerado, // Usa o código gerado automaticamente
       description: role.description,
       region: role.region,
       team_id: role.teamId,
@@ -267,8 +284,8 @@ export default function App() {
     if (error) { alert("Erro ao criar Vaga: " + error.message); return; }
 
     if (data) {
-      setRoles([...roles, { ...role, id: data.id }]);
-      await registerLog('CREATE', 'ROLE', `Vaga criada: ${role.code} - ${role.description}`);
+      setRoles([...roles, { ...role, id: data.id, code: codigoGerado }]);
+      await registerLog('CREATE', 'ROLE', `Vaga criada: ${codigoGerado} - ${role.description}`);
     }
   };
 

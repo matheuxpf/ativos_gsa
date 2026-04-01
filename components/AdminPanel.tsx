@@ -253,7 +253,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = (props) => {
             {activeTab === 'ROLES' && (
               <div className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div><label className={LabelClass}>Código Vaga</label><input required className={InputClass} value={formState.code || ''} onChange={e => setFormState({...formState, code: e.target.value})} /></div>
+                  
+                  {/* CAMPO DE CÓDIGO TRAVADO (AUTONUMERAÇÃO) */}
+                  <div>
+                    <label className={LabelClass}>Código Vaga</label>
+                    <input 
+                      className={`${InputClass} bg-slate-100 cursor-not-allowed text-slate-400 font-mono font-bold`} 
+                      value={formState.id ? formState.code : 'Gerado Automático'} 
+                      readOnly 
+                      disabled 
+                      title="O código será gerado automaticamente ao salvar"
+                    />
+                  </div>
+
                   <div><label className={LabelClass}>Descrição / Nome do Cargo</label><input required className={InputClass} value={formState.description || ''} onChange={e => setFormState({...formState, description: e.target.value})} /></div>
                   <div><label className={LabelClass}>Região</label><select className={InputClass} value={formState.region} onChange={e => setFormState({...formState, region: e.target.value})}>{REGIONS.map(r => <option key={r} value={r}>{r}</option>)}</select></div>
                   <div><label className={LabelClass}>Equipe Fixa</label><select className={InputClass} value={formState.teamId || ''} onChange={e => setFormState({...formState, teamId: e.target.value})}><option value="">Vaga Avulsa / Flexível</option>{props.teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
@@ -295,7 +307,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                 </div>
               </div>
             )}
-            <div className="flex justify-end gap-3 mt-8 pt-4 border-t border-slate-200"><button type="button" onClick={() => setIsEditing(false)} className="px-6 py-2.5 text-slate-500 font-bold hover:bg-slate-100 rounded-lg">Cancelar</button><button type="submit" className="px-8 py-2.5 bg-gsa-green text-white rounded-lg font-black shadow-md hover:bg-green-600">SALVAR</button></div>
+            <div className="flex justify-end gap-3 mt-8 pt-4 border-t border-slate-200">
+              <button type="button" onClick={() => setIsEditing(false)} className="px-6 py-2.5 text-slate-500 font-bold hover:bg-slate-100 rounded-lg">Cancelar</button>
+              <button type="submit" className="px-8 py-2.5 bg-gsa-green text-white rounded-lg font-black shadow-md hover:bg-green-600">SALVAR</button>
+            </div>
           </form>
         )}
       </div>
