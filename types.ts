@@ -22,15 +22,14 @@ export enum OwnerType {
 
 export type AssetBrand = 'Samsung' | 'Dell' | 'Lenovo' | 'Apple';
 
-// --- ATUALIZADO: Remoção do 'active' e inclusão do 'status' ---
 export interface Employee {
-  id: string; 
-  name: string; 
-  role: string; 
-  roleId?: string; 
-  region: Region; 
-  teamId?: string; 
-  status: 'Ativo' | 'Afastado' | 'Desligado'; 
+  id: string;
+  name: string;
+  role: string; // (Texto antigo, manteremos por compatibilidade por enquanto)
+  region: string;
+  teamId?: string | null;
+  roleId?: string | null; // <-- ADICIONE ESTA LINHA (O Vínculo com a Vaga)
+  status: string;
 }
 
 export interface Team {

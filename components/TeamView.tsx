@@ -1,129 +1,228 @@
 import React, { useState } from 'react';
-import { Team, Employee, Asset } from '../types';
-import { Users, MapPin, Edit, Trash2, Monitor } from 'lucide-react';
+import { Team, Employee, Asset, Role } from '../types';
+import { 
+  MapPin, Users, Briefcase, ChevronDown, ChevronRight, 
+  Monitor, Smartphone, AlertTriangle, CheckCircle2, Package
+} from 'lucide-react';
+import { BrazilMap } from './BrazilMap'; // Importando o nosso mapa nativo!
 
 interface TeamViewProps {
   teams: Team[];
   employees: Employee[];
   assets: Asset[];
-  onAddMember: (teamId: string, employeeId: string) => void;
-  onRemoveMember: (employeeId: string) => void;
+  roles: Role[];
   onDeleteTeam: (id: string) => void;
-  // Alterado para aceitar o objeto Team como argumento
   onEditTeam: (team: Team) => Promise<void>;
+  onAddMember: (teamId: string, employeeId: string) => void; 
+  onRemoveMember: (employeeId: string) => void;
 }
 
-export const TeamView: React.FC<TeamViewProps> = ({ teams, employees, assets, onDeleteTeam, onEditTeam }) => {
-  const [selectedRegion, setSelectedRegion] = useState<string>('GO');
+export const TeamView: React.FC<TeamViewProps> = ({ teams, employees, assets, roles, onEditTeam }) => {
+  // Pega todas as regiões únicas que existem no banco (Dinâmico!)
+  const activeRegions = Array.from(new Set(teams.map(t => t.region))).sort();
+  
+  const [selectedRegion, setSelectedRegion] = useState<string>(activeRegions[0] || 'GO');
+  const [expandedChannels, setExpandedChannels] = useState<string[]>([]);
 
-  const filteredTeams = teams.filter(t => t.region === selectedRegion);
+  // Filtra as equipes da região selecionada
+  const regionTeams = teams.filter(t => t.region === selectedRegion);
+  
+  // Agrupa as equipes por Canal (Ex: CV GOIAS, ADMINISTRATIVO, etc)
+  const channels = Array.from(new Set(regionTeams.map(t => t.channel || 'Sem Canal'))).sort();
+
+  const toggleChannel = (channel: string) => {
+    setExpandedChannels(prev => 
+      prev.includes(channel) ? prev.filter(c => c !== channel) : [...prev, channel]
+    );
+  };
+
+  // 🕵️‍♂️ FUNÇÃO DE INTELIGÊNCIA DA T.I.: Analisa o Hardware do Funcionário
+  const renderHardwareStatus = (role: Role, emp: Employee | undefined) => {
+    if (!emp) return <span className="text-[10px] text-amber-600 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200">VAGA VACANTE</span>;
+
+    // Busca os ativos do funcionário
+    const empAssets = assets.filter(a => a.currentOwnerId === emp.id);
+    const hasType = (typeList: string[]) => empAssets.some(a => typeList.includes((a.type || '').toUpperCase()));
+
+    const hardware = [
+      { req: role.reqNotebook, has: hasType(['NOTEBOOK']), label: 'Notebook', icon: Monitor },
+      { req: role.reqDesktop, has: hasType(['DESKTOP', 'COMPUTADOR']), label: 'Desktop', icon: Package },
+      { req: role.reqMobile, has: hasType(['CELULAR', 'SMARTPHONE', 'MOBILE']), label: 'Celular', icon: Smartphone },
+      { req: role.reqSim, has: hasType(['CHIP', 'LINHA']), label: 'Chip', icon: Smartphone },
+    ];
+
+    // Se a vaga não exige NADA, e o cara não tem NADA
+    if (hardware.every(h => !h.req) && empAssets.length === 0) {
+      return <span className="text-[10px] text-slate-400 font-bold">Sem equipamentos atrelados</span>;
+    }
+
+    return (
+      <div className="flex gap-2 items-center flex-wrap">
+        {hardware.map((item, idx) => {
+          if (!item.req && !item.has) return null; // Não exige e não tem = ignora
+          
+          const Icon = item.icon;
+          
+          // Cenário 1: Exige e Tem (Tudo OK)
+          if (item.req && item.has) {
+            return (
+              <div key={idx} className="flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200" title={`Possui ${item.label}`}>
+                <CheckCircle2 size={12} /> {item.label}
+              </div>
+            );
+          }
+          
+          // Cenário 2: Exige e NÃO Tem (Alerta T.I.!)
+          if (item.req && !item.has) {
+            return (
+              <div key={idx} className="flex items-center gap-1 text-[10px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-200 animate-pulse" title={`FALTA ENTREGAR: ${item.label}`}>
+                <AlertTriangle size={12} /> {item.label}
+              </div>
+            );
+          }
+          
+          // Cenário 3: Não exige, mas TEM (Equipamento Extra/Emprestado)
+          if (!item.req && item.has) {
+            return (
+              <div key={idx} className="flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200" title={`Ativo Extra/Emprestado: ${item.label}`}>
+                <Package size={12} /> {item.label} (Extra)
+              </div>
+            );
+          }
+          return null;
+        })}
+      </div>
+    );
+  };
 
   return (
-    <div className="space-y-6">
-      {/* Filtro de Regiões */}
-      <div className="flex gap-2 overflow-x-auto pb-2">
-        {['GO', 'MT', 'TO', 'ADM', 'INDIRETO'].map(region => (
-          <button
-            key={region}
-            onClick={() => setSelectedRegion(region)}
-            className={`px-4 py-2 rounded-full font-bold text-sm transition-all ${
-              selectedRegion === region 
-                ? 'bg-gsa-blue text-white shadow-md' 
-                : 'bg-white text-slate-500 border border-slate-200'
-            }`}
-          >
-            {region === 'INDIRETO' ? 'EXTERNO' : region === 'ADM' ? 'ADMINISTRATIVO' : region}
-          </button>
-        ))}
+    <div className="flex flex-col lg:flex-row gap-8">
+      
+      {/* COLUNA ESQUERDA: O Mapa Interativo */}
+      <div className="w-full lg:w-1/3 flex flex-col gap-4">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 sticky top-6">
+          <h2 className="text-sm font-black text-slate-800 uppercase tracking-wider mb-2 flex items-center gap-2">
+            <MapPin size={18} className="text-gsa-blue" /> Visão Territorial
+          </h2>
+          <p className="text-xs text-slate-500 mb-6">Estados coloridos possuem operação. Clique para detalhar.</p>
+          
+          {/* AQUI ESTÁ O MAPA! */}
+          <BrazilMap 
+            activeRegions={activeRegions} 
+            selectedRegion={selectedRegion} 
+            onSelectRegion={setSelectedRegion} 
+          />
+
+          <div className="mt-8 flex justify-center gap-4 text-[10px] font-bold text-slate-500 uppercase">
+            <span className="flex items-center gap-1"><div className="w-3 h-3 rounded-sm bg-blue-600"></div> Selecionado</span>
+            <span className="flex items-center gap-1"><div className="w-3 h-3 rounded-sm bg-blue-300"></div> Com Operação</span>
+            <span className="flex items-center gap-1"><div className="w-3 h-3 rounded-sm bg-slate-100 border border-slate-200"></div> Sem Operação</span>
+          </div>
+        </div>
       </div>
 
-      {/* Grid de Equipes */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {filteredTeams.map(team => {
-          const teamMembers = employees.filter(e => e.teamId === team.id);
-          const teamAssets = assets.filter(a => a.currentOwnerId === team.id);
+      {/* COLUNA DIREITA: A Cascata de Canais e Equipes */}
+      <div className="w-full lg:w-2/3 space-y-4">
+        
+        {/* Cabeçalho da Região Selecionada */}
+        <div className="flex items-end justify-between border-b border-slate-200 pb-4 mb-6">
+          <div>
+            <h1 className="text-3xl font-black text-slate-800">Operação: {selectedRegion}</h1>
+            <p className="text-sm font-bold text-slate-500 mt-1">{regionTeams.length} {regionTeams.length === 1 ? 'Equipe alocada' : 'Equipes alocadas'} neste estado.</p>
+          </div>
+        </div>
+
+        {channels.length === 0 && activeRegions.length > 0 && (
+          <div className="text-center py-12 bg-white rounded-xl border border-slate-200 text-slate-400">
+            Nenhum canal/equipe encontrado nesta região.
+          </div>
+        )}
+
+        {channels.map(channel => {
+          const isExpanded = expandedChannels.includes(channel);
+          const teamsInChannel = regionTeams.filter(t => t.channel === channel);
 
           return (
-            <div key={team.id} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-              <div className="bg-slate-50 p-4 border-b border-slate-200 flex justify-between items-center">
-                <div>
-                  <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                    <Users size={18} className="text-gsa-blue"/> {team.name}
-                  </h3>
-                  <span className="text-[10px] font-bold text-slate-400 bg-white border px-1.5 rounded mt-1 inline-block">
-                    {team.channel}
-                  </span>
-                </div>
-                <div className="flex gap-2">
-                  {/* CORREÇÃO: Passando o objeto 'team' para a função de edição */}
-                  <button 
-                    onClick={() => onEditTeam(team)} 
-                    className="text-slate-400 hover:text-blue-500 transition-colors"
-                    title="Editar Equipe"
-                  >
-                    <Edit size={16}/>
-                  </button>
-                  <button 
-                    onClick={() => { if(confirm(`Excluir equipe ${team.name}?`)) onDeleteTeam(team.id); }} 
-                    className="text-slate-400 hover:text-red-500 transition-colors"
-                    title="Excluir Equipe"
-                  >
-                    <Trash2 size={16}/></button>
-                </div>
-              </div>
-
-              <div className="p-4 space-y-4">
-                {/* Membros da Equipe */}
-                <div>
-                  <h4 className="text-xs font-bold text-slate-400 uppercase mb-2 text-tracking-wider">
-                    Membros ({teamMembers.length})
-                  </h4>
-                  <div className="space-y-2">
-                    {teamMembers.length === 0 ? (
-                      <p className="text-xs text-slate-400 italic py-2">Nenhum membro vinculado</p>
-                    ) : (
-                      teamMembers.map(emp => (
-                        <div key={emp.id} className="flex justify-between items-center text-sm p-2 bg-slate-50 rounded border border-slate-100">
-                          <span className="font-medium text-slate-700">{emp.name}</span>
-                          <span className="text-[10px] text-slate-400 bg-white px-2 py-0.5 rounded border border-slate-200 uppercase font-bold">
-                            {emp.role}
-                          </span>
-                        </div>
-                      ))
-                    )}
+            <div key={channel} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden transition-all">
+              {/* Acordeão do Canal */}
+              <button 
+                onClick={() => toggleChannel(channel)}
+                className="w-full flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100 transition-colors border-b border-slate-200"
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-lg ${isExpanded ? 'bg-gsa-blue text-white' : 'bg-white text-slate-500 shadow-sm'}`}>
+                    <Briefcase size={20} />
+                  </div>
+                  <div className="text-left">
+                    <h3 className="font-black text-slate-800 text-lg uppercase">{channel}</h3>
+                    <p className="text-xs font-bold text-slate-500">{teamsInChannel.length} Equipes listadas</p>
                   </div>
                 </div>
+                {isExpanded ? <ChevronDown className="text-slate-400" /> : <ChevronRight className="text-slate-400" />}
+              </button>
 
-                {/* Ativos Vinculados à Área (Equipe como Dona) */}
-                {teamAssets.length > 0 && (
-                  <div className="pt-2 border-t border-slate-100">
-                    <h4 className="text-xs font-bold text-slate-400 uppercase mb-2">Ativos da Área ({teamAssets.length})</h4>
-                    <div className="grid grid-cols-2 gap-2">
-                      {teamAssets.map(asset => (
-                        <div key={asset.id} className="flex items-center gap-2 p-2 bg-blue-50 rounded border border-blue-100 text-[11px] text-blue-800">
-                          <Monitor size={14} className="flex-shrink-0"/> 
-                          <span className="font-bold truncate" title={`${asset.type} ${asset.brand}`}>
-                            {asset.type} {asset.brand}
-                          </span>
+              {/* Lista de Equipes do Canal */}
+              {isExpanded && (
+                <div className="p-6 grid grid-cols-1 xl:grid-cols-2 gap-6 bg-slate-50/50">
+                  {teamsInChannel.map(team => {
+                    // Pega as Vagas (Roles) que pertencem a esta Equipe
+                    const teamRoles = roles.filter(r => r.teamId === team.id && r.status !== 'INATIVA');
+                    
+                    return (
+                      <div key={team.id} className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
+                        {/* Header da Equipe */}
+                        <div className="px-4 py-3 bg-white border-b border-slate-100 flex justify-between items-center">
+                          <h4 className="font-bold text-slate-700 flex items-center gap-2">
+                            <Users size={16} className="text-gsa-blue"/> {team.name}
+                          </h4>
+                          <button onClick={() => onEditTeam(team)} className="text-[10px] font-bold text-slate-400 hover:text-gsa-blue uppercase px-2 py-1 rounded bg-slate-50 hover:bg-blue-50 transition-colors">
+                            Detalhes
+                          </button>
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
+
+                        {/* Corpo da Equipe: A Lista de Vagas */}
+                        <div className="p-0 flex-1">
+                          {teamRoles.length === 0 ? (
+                            <div className="p-4 text-center text-xs text-slate-400 italic">Nenhuma vaga estruturada nesta equipe.</div>
+                          ) : (
+                            <div className="divide-y divide-slate-50">
+                              {teamRoles.map(role => {
+                                // Acha o funcionário que está sentado nesta vaga
+                                const occupant = employees.find(e => e.roleId === role.id && e.status !== 'Desligado');
+                                
+                                return (
+                                  <div key={role.id} className="p-3 hover:bg-slate-50 transition-colors flex flex-col gap-2">
+                                    <div className="flex justify-between items-start">
+                                      <div>
+                                        <div className="text-xs font-black text-slate-800 uppercase">{role.description}</div>
+                                        <div className="text-[11px] font-medium text-slate-500 mt-0.5">
+                                          {occupant ? occupant.name : <span className="text-slate-400 italic">Aguardando contratação...</span>}
+                                        </div>
+                                      </div>
+                                      <div className="text-[9px] font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                                        {role.code}
+                                      </div>
+                                    </div>
+                                    
+                                    {/* STATUS DA T.I. - O RAIO-X */}
+                                    <div className="mt-1">
+                                      {renderHardwareStatus(role, occupant)}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           );
         })}
       </div>
-      
-      {/* Estado Vazio */}
-      {filteredTeams.length === 0 && (
-        <div className="text-center py-16 text-slate-400 bg-white rounded-xl border-2 border-dashed border-slate-100">
-          <Users size={48} className="mx-auto mb-4 opacity-10" />
-          <p className="font-medium">Nenhuma equipe encontrada nesta região.</p>
-          <p className="text-xs">Cadastre uma nova equipe na aba Administração.</p>
-        </div>
-      )}
     </div>
   );
 };

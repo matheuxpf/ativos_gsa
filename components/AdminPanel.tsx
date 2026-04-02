@@ -23,7 +23,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = (props) => {
   const ASSET_TYPES = ['NOTEBOOK', 'DESKTOP', 'CELULAR'];
   const ASSET_BRANDS = ['Samsung', 'Dell', 'Lenovo', 'Apple', 'HP', 'Motorola'];
   const ASSET_STATES = ['NOVO', 'USADO', 'QUEBRADO', 'COM DEFEITO'];
-  const REGIONS = ['GO', 'MT', 'TO', 'ADM', 'INDIRETO'];
+  const REGIONS = ['GO', 'MT', 'TO', 'INDIRETO'];
   const CHANNELS = ['CV', 'ATACADO', 'KEY ACCOUNT', 'ADMINISTRATIVO', 'VETOR'];
 
   useEffect(() => { setIsEditing(false); setFormState({}); }, [activeTab]);

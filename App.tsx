@@ -373,7 +373,10 @@ export default function App() {
       case 'MOVEMENTS': return <LogsView />;
       case 'TEAMS': return (
         <TeamView 
-          teams={teams} employees={employees} assets={assets} 
+          teams={teams} 
+          employees={employees} 
+          assets={assets} 
+          roles={roles} /* <--- A SOLUÇÃO ESTÁ AQUI! */
           onAddMember={(teamId, empId) => {
             const emp = employees.find(e => e.id === empId);
             if(emp) handleUpdateEmployee({...emp, teamId});
