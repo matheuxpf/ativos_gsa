@@ -3,7 +3,7 @@ import { Asset, Channel, Employee, OwnerType, Team, Role } from '../types';
 import { PlusCircle, Users, Briefcase, Monitor, Trash2, Edit, X, MapPin, Package, UploadCloud } from 'lucide-react';
 import { STOCK_OWNER_ID, STOCK_OWNER_NAME } from '../constants';
 import { DataImporter } from './DataImporter';
-import { supabase } from '../lib/supabase'; // Adicionado para gravar log de auditoria
+import { supabase } from '../lib/supabase';
 
 interface AdminPanelProps {
   assets: Asset[]; employees: Employee[]; teams: Team[]; roles: Role[];
@@ -42,7 +42,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = (props) => {
 
   const startCreate = () => {
     setIsEditing(true);
-    if (activeTab === 'ASSETS') setFormState({ type: 'NOTEBOOK', brand: 'Samsung', state: 'NOVO', region: 'GO', value: 0, assetTag: '', primaryId: '' });
+    // 🛠️ CORREÇÃO: Removido o 'region: GO' que não pertence à tabela de ativos
+    if (activeTab === 'ASSETS') setFormState({ type: 'NOTEBOOK', brand: 'Samsung', state: 'NOVO', value: 0, assetTag: '', primaryId: '' });
     if (activeTab === 'EMPLOYEES') setFormState({ active: true, roleId: '' });
     if (activeTab === 'TEAMS') setFormState({ region: 'GO', channel: 'CV' });
     if (activeTab === 'ROLES') setFormState({ region: 'GO', status: 'VAGA_ABERTA' });
@@ -60,10 +61,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = (props) => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
     if (activeTab === 'ASSETS') {
-      if (formState.id) props.onUpdateAsset(formState as Asset);
-      else props.onAddAsset({ ...formState, currentOwnerType: OwnerType.ESTOQUE, currentOwnerId: STOCK_OWNER_ID, currentOwnerName: STOCK_OWNER_NAME } as Asset);
+      // 🛡️ BLINDAGEM: Retira os campos "model", "region" ou outros fantasmas do formState
+      const { model, region, ...cleanAssetData } = formState;
+      
+      if (cleanAssetData.id) {
+        props.onUpdateAsset(cleanAssetData as Asset);
+      } else {
+        props.onAddAsset({ 
+          ...cleanAssetData, 
+          currentOwnerType: OwnerType.ESTOQUE, 
+          currentOwnerId: STOCK_OWNER_ID, 
+          currentOwnerName: STOCK_OWNER_NAME 
+        } as Asset);
+      }
     }
+    
     if (activeTab === 'EMPLOYEES') {
       const { roleId, ...dadosLimpos } = formState;
       const selectedRole = props.roles.find(r => r.id === roleId);
@@ -71,14 +85,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = (props) => {
       if (formState.id) props.onUpdateEmployee(payload as Employee);
       else props.onAddEmployee(payload as Employee);
     }
+    
     if (activeTab === 'TEAMS') {
       if (formState.id) props.onUpdateTeam(formState as Team);
       else props.onAddTeam(formState as Team);
     }
+    
     if (activeTab === 'ROLES') {
       if (formState.id) props.onUpdateRole(formState as Role);
       else props.onAddRole(formState as Role);
     }
+    
     setIsEditing(false);
     setFormState({});
   };
@@ -152,7 +169,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = (props) => {
               {activeTab === 'EMPLOYEES' && <button onClick={() => setViewingAssets(item)} title="Ver Ativos" className="text-slate-500 hover:bg-slate-100 hover:text-gsa-blue p-2 rounded mr-2 transition-colors"><Package size={16}/></button>}
               <button onClick={() => startEdit(item)} className="text-blue-600 hover:bg-blue-50 p-2 rounded mr-2"><Edit size={16}/></button>
               
-              {/* AQUI ESTÁ A AUDITORIA EMBUTIDA NO BOTÃO DE DELETAR */}
               <button 
                 onClick={() => { 
                   if(confirm('Excluir permanentemente?')) { 
