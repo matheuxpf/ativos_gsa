@@ -1,4 +1,5 @@
 ﻿from fastapi import FastAPI, Depends, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from database import engine, Base, get_db
 import models, schemas
@@ -7,9 +8,18 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="AtivosGSA API", description="API de controle de infraestrutura")
 
+# Liberando o CORS para o React conseguir conversar com a API
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # Na homologacao/producao, colocamos o IP exato aqui
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 @app.get("/")
 def read_root():
-    return {"status": "online", "message": "Motor FastAPI rodando liso!"}
+    return {"status": "online", "message": "Motor FastAPI rodando liso com CORS ativado!"}
 
 # --- ENDPOINTS TEAMS ---
 @app.post("/teams/", response_model=schemas.Team)
@@ -27,7 +37,6 @@ def read_teams(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
 # --- ENDPOINTS ROLES ---
 @app.post("/roles/", response_model=schemas.Role)
 def create_role(role: schemas.RoleCreate, db: Session = Depends(get_db)):
-    # Trava de seguranca: Verifica se a equipe existe antes de criar a vaga
     db_team = db.query(models.Team).filter(models.Team.id == role.team_id).first()
     if not db_team:
         raise HTTPException(status_code=404, detail="Operação negada: Equipe não encontrada no sistema.")
