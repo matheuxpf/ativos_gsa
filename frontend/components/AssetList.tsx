@@ -1,10 +1,12 @@
 import React, { useState, useMemo } from 'react';
-import { Asset } from '../types';
-import { Trash2, ArrowRightLeft, Eye, Monitor, Smartphone, Box, Server, Filter } from 'lucide-react';
+import { Asset, Employee, Team } from '../types';
+import { Trash2, ArrowRightLeft, Eye, Monitor, Smartphone, Box, Server, Filter, ArrowDownAZ } from 'lucide-react';
 import { supabase } from '../lib/supabase'; // Adicionado para gravar a auditoria direto daqui
 
 interface AssetListProps {
   assets: Asset[];
+  employees?: Employee[];
+  teams?: Team[];
   onViewDetail: (id: string) => void;
   onInitiateMove: (assets: Asset[]) => void;
   onDelete: (id: string) => void;
@@ -25,22 +27,35 @@ const formatAssetForAudit = (asset: Asset) => {
   }
 };
 
-export const AssetList: React.FC<AssetListProps> = ({ assets, onViewDetail, onInitiateMove, onDelete, searchQuery }) => {
+export const AssetList: React.FC<AssetListProps> = ({ assets, employees = [], teams = [], onViewDetail, onInitiateMove, onDelete, searchQuery }) => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [typeFilter, setTypeFilter] = useState<string>('ALL');
+  const [sortBy, setSortBy] = useState<string>('A-Z'); // 'A-Z', 'SETOR', 'DONO', 'ESTADO'
 
-  // --- MOTOR DE BUSCA E FILTRO COMBINADO (BLINDADO) ---
+  // Helper para buscar o setor de um ativo
+  const getDepartment = (ownerId?: string) => {
+    if (!ownerId || ownerId === 'ESTOQUE') return 'ESTOQUE';
+    const emp = employees.find(e => String(e.id) === String(ownerId));
+    if (!emp || !emp.teamId) return 'S/ SETOR';
+    const team = teams.find(t => String(t.id) === String(emp.teamId));
+    return team ? team.name : 'S/ SETOR';
+  };
+
+  // --- MOTOR DE BUSCA, FILTRO E ORDENAÇÃO COMBINADOS ---
   const filteredAssets = useMemo(() => {
     const lowerQuery = searchQuery.toLowerCase().trim();
     
-    return assets.filter(asset => {
+    // 1. Filtrar
+    let result = assets.filter(asset => {
+      const deptName = getDepartment(asset.currentOwnerId).toLowerCase();
       const matchesSearch = !lowerQuery || (
         (asset.brand || '').toLowerCase().includes(lowerQuery) || 
         (asset.assetTag || '').toLowerCase().includes(lowerQuery) ||
         (asset.primaryId || '').toLowerCase().includes(lowerQuery) ||
         (asset.state || '').toLowerCase().includes(lowerQuery) || 
         (asset.currentOwnerName || '').toLowerCase().includes(lowerQuery) ||
-        (asset.type || '').toLowerCase().includes(lowerQuery)
+        (asset.type || '').toLowerCase().includes(lowerQuery) ||
+        deptName.includes(lowerQuery)
       );
 
       const assetType = (asset.type || '').toUpperCase().trim();
@@ -58,7 +73,31 @@ export const AssetList: React.FC<AssetListProps> = ({ assets, onViewDetail, onIn
 
       return matchesSearch && matchesType;
     });
-  }, [assets, searchQuery, typeFilter]);
+
+    // 2. Ordenar
+    result.sort((a, b) => {
+      if (sortBy === 'A-Z') {
+        const nameA = (a.assetTag || a.type || '').toLowerCase();
+        const nameB = (b.assetTag || b.type || '').toLowerCase();
+        return nameA.localeCompare(nameB);
+      } else if (sortBy === 'SETOR') {
+        const deptA = getDepartment(a.currentOwnerId).toLowerCase();
+        const deptB = getDepartment(b.currentOwnerId).toLowerCase();
+        return deptA.localeCompare(deptB);
+      } else if (sortBy === 'DONO') {
+        const donoA = (a.currentOwnerName || '').toLowerCase();
+        const donoB = (b.currentOwnerName || '').toLowerCase();
+        return donoA.localeCompare(donoB);
+      } else if (sortBy === 'ESTADO') {
+        const estA = (a.state || '').toLowerCase();
+        const estB = (b.state || '').toLowerCase();
+        return estA.localeCompare(estB);
+      }
+      return 0;
+    });
+
+    return result;
+  }, [assets, employees, teams, searchQuery, typeFilter, sortBy]);
   // -------------------------------------------------------------------------
 
   const toggleSelect = (id: string) => {
@@ -86,7 +125,7 @@ export const AssetList: React.FC<AssetListProps> = ({ assets, onViewDetail, onIn
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+      <div className="flex justify-between items-center bg-white p-5 rounded-2xl border border-slate-100 shadow-card">
         <div>
           <h2 className="text-xl font-black text-slate-800">Inventário Geral</h2>
           <p className="text-sm text-slate-500">
@@ -101,28 +140,44 @@ export const AssetList: React.FC<AssetListProps> = ({ assets, onViewDetail, onIn
         )}
       </div>
 
-      <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-        {quickFilters.map(filter => {
-          const Icon = filter.icon;
-          const isActive = typeFilter === filter.id;
-          return (
-            <button
-              key={filter.id}
-              onClick={() => setTypeFilter(filter.id)}
-              className={`flex items-center px-4 py-2 rounded-full text-sm font-bold transition-all whitespace-nowrap ${
-                isActive ? 'bg-gsa-blue text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50 hover:text-slate-800'
-              }`}
-            >
-              <Icon size={16} className="mr-2" />
-              {filter.label}
-            </button>
-          );
-        })}
+      <div className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center pb-2">
+        <div className="flex gap-2 overflow-x-auto scrollbar-hide w-full md:w-auto">
+          {quickFilters.map(filter => {
+            const Icon = filter.icon;
+            const isActive = typeFilter === filter.id;
+            return (
+              <button
+                key={filter.id}
+                onClick={() => setTypeFilter(filter.id)}
+                className={`flex items-center px-4 py-2 rounded-full text-sm font-bold transition-all duration-300 whitespace-nowrap ${
+                  isActive ? 'bg-gradient-to-r from-gsa-blue to-gsa-darkBlue text-white shadow-glow' : 'bg-white text-slate-500 border border-slate-100 hover:bg-slate-50 hover:text-slate-800 hover:shadow-sm'
+                }`}
+              >
+                <Icon size={16} className="mr-2" />
+                {filter.label}
+              </button>
+            );
+          })}
+        </div>
+        
+        <div className="flex items-center bg-white border border-slate-100 rounded-full px-4 py-2 shadow-sm min-w-[200px] hover:shadow-md transition-shadow duration-300">
+          <ArrowDownAZ size={18} className="text-slate-400 mr-2" />
+          <select 
+            value={sortBy} 
+            onChange={(e) => setSortBy(e.target.value)}
+            className="bg-transparent border-none focus:ring-0 text-sm font-bold text-slate-600 w-full outline-none cursor-pointer"
+          >
+            <option value="A-Z">Ordem Alfabética</option>
+            <option value="SETOR">Agrupar por Setor</option>
+            <option value="DONO">Nome do Responsável</option>
+            <option value="ESTADO">Estado Físico</option>
+          </select>
+        </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <table className="min-w-full divide-y divide-slate-200">
-          <thead className="bg-slate-50">
+      <div className="bg-white rounded-2xl shadow-card border border-slate-100 overflow-hidden">
+        <table className="min-w-full divide-y divide-slate-100">
+          <thead className="bg-slate-50/50">
             <tr>
               <th className="px-6 py-4 text-left w-12"><input type="checkbox" checked={filteredAssets.length > 0 && selectedIds.size === filteredAssets.length} onChange={(e) => setSelectedIds(e.target.checked ? new Set(filteredAssets.map(a => a.id)) : new Set())} className="rounded border-slate-300 text-gsa-blue focus:ring-gsa-blue"/></th>
               <th className="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Ativo</th>
@@ -132,7 +187,7 @@ export const AssetList: React.FC<AssetListProps> = ({ assets, onViewDetail, onIn
               <th className="px-6 py-4 text-right"></th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-200">
+          <tbody className="divide-y divide-slate-100">
             {filteredAssets.length === 0 ? (
               <tr><td colSpan={6} className="px-6 py-12 text-center text-slate-400">Nenhum ativo encontrado com os filtros atuais.</td></tr>
             ) : (
@@ -143,7 +198,12 @@ export const AssetList: React.FC<AssetListProps> = ({ assets, onViewDetail, onIn
                     <div className="flex items-center">
                       <div className="p-2 bg-slate-100 rounded-lg text-slate-500 mr-3 shadow-sm">{getIcon(asset.type)}</div>
                       <div>
-                        <div className="font-bold text-slate-700 uppercase">{asset.type} <span className="text-gsa-blue">{asset.brand}</span></div>
+                        <div className="font-bold text-slate-700 uppercase">
+                          {asset.type} 
+                          {asset.brand && !['genérica', 'sem marca'].includes(asset.brand.toLowerCase()) && (
+                            <span className="text-gsa-blue ml-1">{asset.brand}</span>
+                          )}
+                        </div>
                         <div className="text-xs text-slate-400 mt-0.5 truncate max-w-[200px]">{asset.details || '-'}</div>
                       </div>
                     </div>

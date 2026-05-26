@@ -4,18 +4,30 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>GSA Asset Manager</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
         theme: {
           extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+            },
             colors: {
               gsa: {
-                blue: '#0047AB', // Approximate GSA Blue
-                darkBlue: '#003380',
-                green: '#76BC21', // Approximate GSA Lime Green
+                blue: '#0047AB',
+                darkBlue: '#002B66',
+                deepNight: '#02132b',
+                green: '#76BC21',
                 lightGreen: '#95D645',
               }
+            },
+            boxShadow: {
+              'glass': '0 8px 32px 0 rgba(0, 0, 0, 0.05)',
+              'glow': '0 0 15px rgba(118, 188, 33, 0.4)',
+              'card': '0 4px 20px -2px rgba(0, 0, 0, 0.05)'
             }
           }
         }

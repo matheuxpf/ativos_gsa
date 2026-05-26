@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from './lib/supabase';
+import * as api from './lib/api';
 import { registerLog } from './lib/audit';
 import { 
   Asset, Employee, Team, Role, ViewState, 
@@ -13,25 +13,21 @@ import { AdminPanel } from './components/AdminPanel';
 import { LogsView } from './components/LogsView';
 import { MovementForm } from './components/MovementForm';
 import { TeamView } from './components/TeamView';
+import { FastMovementTab } from './components/FastMovementTab';
 
-// 🕵️‍♂️ FUNÇÃO RASTREADORA E BLINDADA CENTRALIZADA
-// Ela procura as chaves tanto do padrão do Banco (snake_case) quanto do Front (camelCase)
 // 🕵️‍♂️ FUNÇÃO RASTREADORA E BLINDADA CENTRALIZADA
 const formatAssetForAudit = (asset: any) => {
   const type = (asset.type || '').toUpperCase().trim();
   const nomeDaMaquina = asset.assetTag || asset.asset_tag; 
   const macImei = asset.primaryId || asset.primary_id;
   
-  // Validação: Só inclui a marca se ela existir de verdade e não for um texto genérico
   const temMarca = asset.brand && asset.brand !== 'Sem Marca' && asset.brand !== 'Genérica';
   const brandString = temMarca ? ` ${asset.brand}` : '';
 
-  // Regra Celular
   if (['CELULAR', 'MOBILE', 'SMARTPHONE'].includes(type)) {
     return `${type}${brandString} (IMEI/Serial: ${macImei || 'N/A'})`;
   }
 
-  // Regra universal (Servidor, Note, Desktop)
   return `${type}${brandString} (${nomeDaMaquina || 'S/ NOME'})`;
 };
 
@@ -51,15 +47,15 @@ export default function App() {
   }, []);
 
   const fetchData = async () => {
-    const [assetsRes, empRes, teamsRes, rolesRes] = await Promise.all([
-      supabase.from('assets').select('*'),
-      supabase.from('employees').select('*'),
-      supabase.from('teams').select('*'),
-      supabase.from('roles').select('*')
-    ]);
+    try {
+      const [assetsData, empData, teamsData, rolesData] = await Promise.all([
+        api.getAssets(),
+        api.getEmployees(),
+        api.getTeams(),
+        api.getRoles()
+      ]);
 
-    if (assetsRes.data) {
-      setAssets(assetsRes.data.map(a => ({
+      setAssets(assetsData.map((a: any) => ({
         ...a,
         primaryId: a.primary_id,
         assetTag: a.asset_tag,
@@ -67,25 +63,20 @@ export default function App() {
         currentOwnerType: a.current_owner_type,
         currentOwnerName: a.current_owner_name
       })));
-    }
-    
-    if (empRes.data) {
-      setEmployees(empRes.data.map(e => ({
+      
+      setEmployees(empData.map((e: any) => ({
         ...e,
         teamId: e.team_id,
+        roleId: e.role_id,
         status: e.status || 'Ativo' 
       })));
-    }
-    
-    if (teamsRes.data) {
-      setTeams(teamsRes.data.map(t => ({
+      
+      setTeams(teamsData.map((t: any) => ({
         ...t,
         leaderId: t.leader_id
       })));
-    }
-    
-    if (rolesRes.data) {
-      setRoles(rolesRes.data.map(r => ({
+      
+      setRoles(rolesData.map((r: any) => ({
         ...r,
         teamId: r.team_id,
         reqNotebook: r.req_notebook || false,
@@ -94,6 +85,8 @@ export default function App() {
         reqSim: r.req_sim || false,
         status: r.status || 'ATIVA'
       })));
+    } catch (err) {
+      console.error("Erro ao buscar dados da API:", err);
     }
   };
 
@@ -114,13 +107,12 @@ export default function App() {
       current_owner_name: asset.currentOwnerName
     };
 
-    const { data, error } = await supabase.from('assets').insert([dbPayload]).select().single();
-    if (error) { alert("Erro ao criar Ativo: " + error.message); return; }
-    
-    if (data) {
+    try {
+      const data = await api.createAsset(dbPayload);
       setAssets([...assets, { ...asset, id: data.id }]);
-      // Aplicando a formatação limpa no momento do cadastro!
       await registerLog('CREATE', 'ASSET', `Ativo cadastrado: ${formatAssetForAudit(asset)}`);
+    } catch (error: any) {
+      alert("Erro ao criar Ativo: " + error.message);
     }
   };
 
@@ -140,30 +132,27 @@ export default function App() {
       current_owner_name: asset.currentOwnerName
     };
 
-    const { error } = await supabase.from('assets').update(dbPayload).eq('id', asset.id);
-    if (error) { alert("Erro ao atualizar Ativo: " + error.message); return; }
-    
-    setAssets(assets.map(a => a.id === asset.id ? asset : a));
-    // Aplicando a formatação limpa no momento da edição!
-    await registerLog('UPDATE', 'ASSET', `Dados do ativo atualizados: ${formatAssetForAudit(asset)}`);
+    try {
+      await api.updateAsset(asset.id, dbPayload);
+      setAssets(assets.map(a => a.id === asset.id ? asset : a));
+      await registerLog('UPDATE', 'ASSET', `Dados do ativo atualizados: ${formatAssetForAudit(asset)}`);
+    } catch (error: any) {
+      alert("Erro ao atualizar Ativo: " + error.message);
+    }
   };
 
   const handleDeleteAsset = async (id: string) => {
-    // 1. Pega o objeto antes de excluir
     const assetToDelete = assets.find(a => a.id === id);
     if (!assetToDelete) return;
-
-    // 2. Formata com a inteligência centralizada
     const nomeAmigavel = formatAssetForAudit(assetToDelete);
 
-    // 3. Deleta do banco
-    const { error } = await supabase.from('assets').delete().eq('id', id);
-    if (error) { alert("Erro ao excluir Ativo: " + error.message); return; }
-    
-    setAssets(assets.filter(a => a.id !== id));
-    
-    // 4. Grava no log usando registerLog
-    await registerLog('DELETE', 'ASSET', `Ativo excluído: ${nomeAmigavel}`);
+    try {
+      await api.deleteAsset(id);
+      setAssets(assets.filter(a => a.id !== id));
+      await registerLog('DELETE', 'ASSET', `Ativo excluído: ${nomeAmigavel}`);
+    } catch (error: any) {
+      alert("Erro ao excluir Ativo: " + error.message);
+    }
   };
 
   const handleAddEmployee = async (employee: Employee) => {
@@ -171,16 +160,17 @@ export default function App() {
       name: employee.name,
       role: employee.role,
       region: employee.region,
-      team_id: employee.teamId,
+      team_id: employee.teamId ? parseInt(employee.teamId as string) : null,
+      role_id: employee.roleId ? parseInt(employee.roleId as string) : null,
       status: employee.status || 'Ativo' 
     };
 
-    const { data, error } = await supabase.from('employees').insert([dbPayload]).select().single();
-    if (error) { alert("Erro ao criar Funcionário: " + error.message); return; }
-    
-    if (data) {
+    try {
+      const data = await api.createEmployee(dbPayload);
       setEmployees([...employees, { ...employee, id: data.id }]);
       await registerLog('CREATE', 'EMPLOYEE', `Funcionário cadastrado: ${employee.name}`);
+    } catch (error: any) {
+      alert("Erro ao criar Funcionário: " + error.message);
     }
   };
 
@@ -189,24 +179,29 @@ export default function App() {
       name: employee.name,
       role: employee.role,
       region: employee.region,
-      team_id: employee.teamId,
-      status: employee.status
+      team_id: employee.teamId ? parseInt(employee.teamId as string) : null,
+      role_id: employee.roleId ? parseInt(employee.roleId as string) : null,
+      status: employee.status || 'Ativo'
     };
 
-    const { error } = await supabase.from('employees').update(dbPayload).eq('id', employee.id);
-    if (error) { alert("Erro ao atualizar Funcionário: " + error.message); return; }
-    
-    setEmployees(employees.map(e => e.id === employee.id ? employee : e));
-    await registerLog('UPDATE', 'EMPLOYEE', `Cadastro de funcionário atualizado: ${employee.name}`);
+    try {
+      await api.updateEmployee(employee.id, dbPayload);
+      setEmployees(employees.map(e => e.id === employee.id ? employee : e));
+      await registerLog('UPDATE', 'EMPLOYEE', `Cadastro de funcionário atualizado: ${employee.name}`);
+    } catch (error: any) {
+      alert("Erro ao atualizar Funcionário: " + error.message);
+    }
   };
 
   const handleDeleteEmployee = async (id: string) => {
     const empToDelete = employees.find(e => e.id === id);
-    const { error } = await supabase.from('employees').delete().eq('id', id);
-    if (error) { alert("Erro ao excluir Funcionário: " + error.message); return; }
-    
-    setEmployees(employees.filter(e => e.id !== id));
-    await registerLog('DELETE', 'EMPLOYEE', `Funcionário removido: ${empToDelete?.name}`);
+    try {
+      await api.deleteEmployee(id);
+      setEmployees(employees.filter(e => e.id !== id));
+      await registerLog('DELETE', 'EMPLOYEE', `Funcionário removido: ${empToDelete?.name}`);
+    } catch (error: any) {
+      alert("Erro ao excluir Funcionário: " + error.message);
+    }
   };
 
   const handleAddTeam = async (team: Team) => {
@@ -217,12 +212,12 @@ export default function App() {
       leader_id: team.leaderId
     };
 
-    const { data, error } = await supabase.from('teams').insert([dbPayload]).select().single();
-    if (error) { alert("Erro ao criar Equipe: " + error.message); return; }
-    
-    if (data) {
+    try {
+      const data = await api.createTeam(dbPayload);
       setTeams([...teams, { ...team, id: data.id }]);
       await registerLog('CREATE', 'TEAM', `Equipe criada: ${team.name} (${team.region})`);
+    } catch (error: any) {
+      alert("Erro ao criar Equipe: " + error.message);
     }
   };
 
@@ -234,42 +229,43 @@ export default function App() {
       leader_id: team.leaderId
     };
 
-    const { error } = await supabase.from('teams').update(dbPayload).eq('id', team.id);
-    if (error) { alert("Erro ao atualizar Equipe: " + error.message); return; }
-    
-    setTeams(teams.map(t => t.id === team.id ? team : t));
-    await registerLog('UPDATE', 'TEAM', `Equipe atualizada: ${team.name}`);
+    try {
+      await api.updateTeam(team.id, dbPayload);
+      setTeams(teams.map(t => t.id === team.id ? team : t));
+      await registerLog('UPDATE', 'TEAM', `Equipe atualizada: ${team.name}`);
+    } catch (error: any) {
+      alert("Erro ao atualizar Equipe: " + error.message);
+    }
   };
 
   const handleDeleteTeam = async (id: string) => {
     const teamToDelete = teams.find(t => t.id === id);
-    const { error } = await supabase.from('teams').delete().eq('id', id);
-    if (error) { alert("Erro ao excluir Equipe: " + error.message); return; }
-    
-    setTeams(teams.filter(t => t.id !== id));
-    await registerLog('DELETE', 'TEAM', `Equipe removida: ${teamToDelete?.name}`);
+    try {
+      await api.deleteTeam(id);
+      setTeams(teams.filter(t => t.id !== id));
+      await registerLog('DELETE', 'TEAM', `Equipe removida: ${teamToDelete?.name}`);
+    } catch (error: any) {
+      alert("Erro ao excluir Equipe: " + error.message);
+    }
   };
 
   const handleAddRole = async (role: Role) => {
-    // Lógica de Autonumeração: Calcula o próximo código se for uma criação
     let codigoGerado = role.code;
     
     if (!codigoGerado) {
       let maiorNumero = 0;
       roles.forEach(r => {
-        // Extrai apenas os números dos códigos existentes (ex: de "VG-0015" extrai 15)
         const match = r.code?.match(/\d+/);
         if (match) {
           const num = parseInt(match[0], 10);
           if (num > maiorNumero) maiorNumero = num;
         }
       });
-      // Monta o novo código somando 1 e colocando zeros à esquerda (ex: VG-0016)
       codigoGerado = `VG-${String(maiorNumero + 1).padStart(4, '0')}`;
     }
 
     const dbPayload = {
-      code: codigoGerado, // Usa o código gerado automaticamente
+      code: codigoGerado,
       description: role.description,
       region: role.region,
       team_id: role.teamId,
@@ -280,12 +276,12 @@ export default function App() {
       status: role.status || 'ATIVA'
     };
 
-    const { data, error } = await supabase.from('roles').insert([dbPayload]).select().single();
-    if (error) { alert("Erro ao criar Vaga: " + error.message); return; }
-
-    if (data) {
+    try {
+      const data = await api.createRole(dbPayload);
       setRoles([...roles, { ...role, id: data.id, code: codigoGerado }]);
       await registerLog('CREATE', 'ROLE', `Vaga criada: ${codigoGerado} - ${role.description}`);
+    } catch (error: any) {
+      alert("Erro ao criar Vaga: " + error.message);
     }
   };
 
@@ -302,52 +298,63 @@ export default function App() {
       status: role.status || 'ATIVA'
     };
 
-    const { error } = await supabase.from('roles').update(dbPayload).eq('id', role.id);
-    if (error) { alert("Erro ao atualizar Vaga: " + error.message); return; }
-
-    setRoles(roles.map(r => r.id === role.id ? role : r));
-    await registerLog('UPDATE', 'ROLE', `Vaga atualizada: ${role.code}`);
+    try {
+      await api.updateRole(role.id, dbPayload);
+      setRoles(roles.map(r => r.id === role.id ? role : r));
+      await registerLog('UPDATE', 'ROLE', `Vaga atualizada: ${role.code}`);
+    } catch (error: any) {
+      alert("Erro ao atualizar Vaga: " + error.message);
+    }
   };
 
   const handleDeleteRole = async (id: string) => {
     const roleToDelete = roles.find(r => r.id === id);
-    const { error } = await supabase.from('roles').delete().eq('id', id);
-    if (error) { alert("Erro ao excluir Vaga: " + error.message); return; }
-
-    setRoles(roles.filter(r => r.id !== id));
-    await registerLog('DELETE', 'ROLE', `Vaga excluída: ${roleToDelete?.code}`);
+    try {
+      await api.deleteRole(id);
+      setRoles(roles.filter(r => r.id !== id));
+      await registerLog('DELETE', 'ROLE', `Vaga excluída: ${roleToDelete?.code}`);
+    } catch (error: any) {
+      alert("Erro ao excluir Vaga: " + error.message);
+    }
   };
 
   const handleConfirmMove = async (movements: Partial<Movement>[], newStatus: AssetStatus, newOwner: { type: OwnerType, id: string, name: string }) => {
     try {
-      const dbMovements = movements.map(m => ({
-        asset_id: m.assetId,
-        from_owner_id: m.fromOwnerId,
-        from_owner_type: m.fromOwnerType,
-        from_owner_name: m.fromOwnerName,
-        to_owner_id: m.toOwnerId,
-        to_owner_type: m.toOwnerType,
-        to_owner_name: m.toOwnerName,
-        reason: m.reason,
-        observations: m.observations,
-        registered_by: m.registeredBy,
-        date: m.date
-      }));
-
-      const { error: moveError } = await supabase.from('movements').insert(dbMovements);
-      if (moveError) throw moveError;
+      for (const m of movements) {
+        const dbMovement = {
+          asset_id: typeof m.assetId === 'string' ? parseInt(m.assetId) : m.assetId,
+          from_owner_id: m.fromOwnerId ? m.fromOwnerId.toString() : '',
+          from_owner_type: m.fromOwnerType || '',
+          from_owner_name: m.fromOwnerName || '',
+          to_owner_id: m.toOwnerId ? m.toOwnerId.toString() : '',
+          to_owner_type: m.toOwnerType || '',
+          to_owner_name: m.toOwnerName || '',
+          reason: m.reason || 'Movimentação Rápida',
+          observations: m.observations || '',
+          registered_by: m.registeredBy || 'Administrador',
+          date: m.date || new Date().toISOString()
+        };
+        await api.createMovement(dbMovement);
+      }
 
       const assetIds = movements.map(m => m.assetId);
-      const { error: assetError } = await supabase.from('assets')
-        .update({ 
-          status: newStatus, 
-          current_owner_type: newOwner.type, 
-          current_owner_id: newOwner.id, 
-          current_owner_name: newOwner.name 
-        })
-        .in('id', assetIds as string[]);
-
-      if (assetError) throw assetError;
+      
+      for (const id of assetIds) {
+        if (!id) continue;
+        const currentAsset = assets.find(a => a.id === id);
+        if (currentAsset) {
+          const dbPayload = {
+            ...currentAsset,
+            status: newStatus,
+            current_owner_type: newOwner.type,
+            current_owner_id: newOwner.id ? newOwner.id.toString() : '',
+            current_owner_name: newOwner.name,
+            primary_id: currentAsset.primaryId,
+            asset_tag: currentAsset.assetTag
+          };
+          await api.updateAsset(id, dbPayload);
+        }
+      }
 
       setAssets(assets.map(a => assetIds.includes(a.id) ? { 
         ...a, status: newStatus, currentOwnerType: newOwner.type, currentOwnerId: newOwner.id, currentOwnerName: newOwner.name 
@@ -365,25 +372,26 @@ export default function App() {
       case 'DASHBOARD': return <Dashboard assets={assets} />;
       case 'ASSETS': return (
         <AssetList 
-          assets={assets} searchQuery={searchQuery} 
+          assets={assets} employees={employees} teams={teams} searchQuery={searchQuery} 
           onInitiateMove={setMovingAssets} onDelete={handleDeleteAsset} 
           onEdit={handleUpdateAsset} onViewDetail={() => {}} 
         />
       );
       case 'MOVEMENTS': return <LogsView />;
+      case 'FAST_MOVE': return <FastMovementTab assets={assets} employees={employees} onConfirmMove={handleConfirmMove} />;
       case 'TEAMS': return (
         <TeamView 
           teams={teams} 
           employees={employees} 
           assets={assets} 
-          roles={roles} /* <--- A SOLUÇÃO ESTÁ AQUI! */
+          roles={roles}
           onAddMember={(teamId, empId) => {
             const emp = employees.find(e => e.id === empId);
             if(emp) handleUpdateEmployee({...emp, teamId});
           }} 
           onRemoveMember={(empId) => {
             const emp = employees.find(e => e.id === empId);
-            if(emp) handleUpdateEmployee({...emp, teamId: null});
+            if(emp) handleUpdateEmployee({...emp, teamId: undefined});
           }} 
           onDeleteTeam={handleDeleteTeam} 
           onEditTeam={handleUpdateTeam} 
@@ -391,7 +399,7 @@ export default function App() {
       );
       case 'ADMIN': return (
         <AdminPanel 
-          assets={assets} employees={employees} teams={teams} roles={roles}
+          assets={assets} employees={employees} teams={teams} roles={roles} searchQuery={searchQuery}
           onAddAsset={handleAddAsset} onUpdateAsset={handleUpdateAsset} onDeleteAsset={handleDeleteAsset}
           onAddEmployee={handleAddEmployee} onUpdateEmployee={handleUpdateEmployee} onDeleteEmployee={handleDeleteEmployee}
           onAddTeam={handleAddTeam} onUpdateTeam={handleUpdateTeam} onDeleteTeam={handleDeleteTeam}

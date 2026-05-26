@@ -30,9 +30,19 @@ export const TeamView: React.FC<TeamViewProps> = ({ teams, employees, assets, ro
   // Agrupa as equipes por Canal (Ex: CV GOIAS, ADMINISTRATIVO, etc)
   const channels = Array.from(new Set(regionTeams.map(t => t.channel || 'Sem Canal'))).sort();
 
+  const [searchTeamQuery, setSearchTeamQuery] = useState('');
+
   const toggleChannel = (channel: string) => {
     setExpandedChannels(prev => 
       prev.includes(channel) ? prev.filter(c => c !== channel) : [...prev, channel]
+    );
+  };
+
+  const [expandedTeams, setExpandedTeams] = useState<string[]>([]);
+
+  const toggleTeam = (teamId: string) => {
+    setExpandedTeams(prev => 
+      prev.includes(teamId) ? prev.filter(id => id !== teamId) : [...prev, teamId]
     );
   };
 
@@ -100,7 +110,7 @@ export const TeamView: React.FC<TeamViewProps> = ({ teams, employees, assets, ro
       
       {/* COLUNA ESQUERDA: O Mapa Interativo */}
       <div className="w-full lg:w-1/3 flex flex-col gap-4">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 sticky top-6">
+        <div className="bg-white p-6 rounded-2xl shadow-card border border-slate-100 sticky top-6 hover:shadow-lg transition-shadow duration-300">
           <h2 className="text-sm font-black text-slate-800 uppercase tracking-wider mb-2 flex items-center gap-2">
             <MapPin size={18} className="text-gsa-blue" /> Visão Territorial
           </h2>
@@ -132,18 +142,55 @@ export const TeamView: React.FC<TeamViewProps> = ({ teams, employees, assets, ro
           </div>
         </div>
 
+        {/* --- FILTRO E BUSCA --- */}
+        <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-card flex flex-col md:flex-row gap-4 justify-between items-center mb-4">
+          <div className="w-full relative">
+            <input 
+              type="text" 
+              placeholder="Buscar equipe, vaga ou funcionário..." 
+              value={searchTeamQuery}
+              onChange={(e) => {
+                const term = e.target.value;
+                setSearchTeamQuery(term);
+                if (term.trim()) {
+                  setExpandedChannels(channels);
+                } else {
+                  setExpandedChannels([]);
+                }
+              }}
+              className="w-full pl-4 pr-4 py-2 bg-slate-50/50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-gsa-green/50 focus:border-gsa-green transition-all shadow-sm"
+            />
+          </div>
+        </div>
+
         {channels.length === 0 && activeRegions.length > 0 && (
-          <div className="text-center py-12 bg-white rounded-xl border border-slate-200 text-slate-400">
+          <div className="text-center py-12 bg-white rounded-2xl border border-slate-100 shadow-card text-slate-400">
             Nenhum canal/equipe encontrado nesta região.
           </div>
         )}
 
         {channels.map(channel => {
           const isExpanded = expandedChannels.includes(channel);
-          const teamsInChannel = regionTeams.filter(t => t.channel === channel);
+          let teamsInChannel = regionTeams.filter(t => t.channel === channel);
+
+          if (searchTeamQuery) {
+            const q = searchTeamQuery.toLowerCase();
+            teamsInChannel = teamsInChannel.filter(team => {
+              if (team.name.toLowerCase().includes(q)) return true;
+              const tr = roles.filter(r => r.teamId === team.id && r.status !== 'INATIVA');
+              for (const r of tr) {
+                if (r.description.toLowerCase().includes(q)) return true;
+                const occs = employees.filter(e => String(e.roleId) === String(r.id) && e.status !== 'Desligado');
+                if (occs.some(occ => occ.name.toLowerCase().includes(q))) return true;
+              }
+              return false;
+            });
+          }
+
+          if (searchTeamQuery && teamsInChannel.length === 0) return null;
 
           return (
-            <div key={channel} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden transition-all">
+            <div key={channel} className="bg-white rounded-2xl shadow-card border border-slate-100 overflow-hidden transition-all duration-300 hover:shadow-lg">
               {/* Acordeão do Canal */}
               <button 
                 onClick={() => toggleChannel(channel)}
@@ -166,40 +213,92 @@ export const TeamView: React.FC<TeamViewProps> = ({ teams, employees, assets, ro
                 <div className="p-6 grid grid-cols-1 xl:grid-cols-2 gap-6 bg-slate-50/50">
                   {teamsInChannel.map(team => {
                     // Pega as Vagas (Roles) que pertencem a esta Equipe
-                    const teamRoles = roles.filter(r => r.teamId === team.id && r.status !== 'INATIVA');
+                    let teamRoles = roles.filter(r => r.teamId === team.id && r.status !== 'INATIVA');
                     
+                    if (searchTeamQuery) {
+                      const q = searchTeamQuery.toLowerCase();
+                      if (!team.name.toLowerCase().includes(q)) {
+                        teamRoles = teamRoles.filter(role => {
+                          if (role.description.toLowerCase().includes(q)) return true;
+                          const occs = employees.filter(e => String(e.roleId) === String(role.id) && e.status !== 'Desligado');
+                          return occs.some(occ => occ.name.toLowerCase().includes(q));
+                        });
+                      }
+                    }
+                    
+                    const isTeamExpanded = expandedTeams.includes(team.id) || !!searchTeamQuery;
+
                     return (
-                      <div key={team.id} className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
+                      <div key={team.id} className="bg-white border border-slate-100 rounded-xl shadow-sm overflow-hidden flex flex-col hover:border-slate-300 transition-colors duration-300">
                         {/* Header da Equipe */}
-                        <div className="px-4 py-3 bg-white border-b border-slate-100 flex justify-between items-center">
-                          <h4 className="font-bold text-slate-700 flex items-center gap-2">
-                            <Users size={16} className="text-gsa-blue"/> {team.name}
-                          </h4>
-                          <button onClick={() => onEditTeam(team)} className="text-[10px] font-bold text-slate-400 hover:text-gsa-blue uppercase px-2 py-1 rounded bg-slate-50 hover:bg-blue-50 transition-colors">
-                            Detalhes
+                        <div 
+                          className="px-4 py-3 bg-white border-b border-slate-100 flex justify-between items-center cursor-pointer hover:bg-slate-50 transition-colors"
+                          onClick={() => toggleTeam(team.id)}
+                        >
+                          <div>
+                            <h4 className="font-bold text-slate-700 flex items-center gap-2">
+                              <Users size={16} className="text-gsa-blue"/> {team.name}
+                            </h4>
+                            {!isTeamExpanded && (
+                              <p className="text-[11px] text-slate-400 mt-0.5 font-bold">{teamRoles.length} Vagas estruturadas</p>
+                            )}
+                          </div>
+                          <button className="text-[10px] font-bold text-slate-400 hover:text-gsa-blue uppercase px-2 py-1 rounded bg-slate-50 hover:bg-blue-50 transition-colors">
+                            {isTeamExpanded ? 'Ocultar' : 'Detalhes'}
                           </button>
                         </div>
 
                         {/* Corpo da Equipe: A Lista de Vagas */}
-                        <div className="p-0 flex-1">
-                          {teamRoles.length === 0 ? (
-                            <div className="p-4 text-center text-xs text-slate-400 italic">Nenhuma vaga estruturada nesta equipe.</div>
-                          ) : (
-                            <div className="divide-y divide-slate-50">
-                              {teamRoles.map(role => {
-                                // Acha o funcionário que está sentado nesta vaga
-                                const occupant = employees.find(e => e.roleId === role.id && e.status !== 'Desligado');
+                        {isTeamExpanded && (
+                          <div className="p-0 flex-1 bg-slate-50/30">
+                            {teamRoles.length === 0 ? (
+                              <div className="p-4 text-center text-xs text-slate-400 italic">Nenhuma vaga estruturada nesta equipe.</div>
+                            ) : (
+                              <div className="divide-y divide-slate-50">
+                              {teamRoles.flatMap(role => {
+                                // Pega TODOS os funcionários atrelados a esta vaga
+                                let occupants = employees.filter(e => String(e.roleId) === String(role.id) && e.status !== 'Desligado');
                                 
-                                return (
-                                  <div key={role.id} className="p-3 hover:bg-slate-50 transition-colors flex flex-col gap-2">
+                                // Opcional: Se estiver buscando um nome, filtra os ocupantes para não exibir pares se for uma equipe muito grande (mas preserva todos se a equipe ou vaga bateu)
+                                if (searchTeamQuery) {
+                                  const q = searchTeamQuery.toLowerCase();
+                                  if (!team.name.toLowerCase().includes(q) && !role.description.toLowerCase().includes(q)) {
+                                    occupants = occupants.filter(occ => occ.name.toLowerCase().includes(q));
+                                  }
+                                }
+                                
+                                if (occupants.length === 0) {
+                                  return [
+                                    <div key={role.id} className="p-3 hover:bg-slate-50 transition-colors flex flex-col gap-2">
+                                      <div className="flex justify-between items-start">
+                                        <div>
+                                          <div className="text-xs font-black text-slate-800 uppercase">{role.description}</div>
+                                          <div className="text-[11px] font-medium text-slate-500 mt-0.5">
+                                            <span className="text-slate-400 italic">Aguardando contratação...</span>
+                                          </div>
+                                        </div>
+                                        <div className="text-[9px] font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded flex items-center gap-2">
+                                          {role.code}
+                                        </div>
+                                      </div>
+                                      
+                                      <div className="mt-1">
+                                        {renderHardwareStatus(role, undefined)}
+                                      </div>
+                                    </div>
+                                  ];
+                                }
+
+                                return occupants.map(occupant => (
+                                  <div key={`${role.id}-${occupant.id}`} className="p-3 hover:bg-slate-50 transition-colors flex flex-col gap-2">
                                     <div className="flex justify-between items-start">
                                       <div>
                                         <div className="text-xs font-black text-slate-800 uppercase">{role.description}</div>
                                         <div className="text-[11px] font-medium text-slate-500 mt-0.5">
-                                          {occupant ? occupant.name : <span className="text-slate-400 italic">Aguardando contratação...</span>}
+                                          {occupant.name}
                                         </div>
                                       </div>
-                                      <div className="text-[9px] font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                                      <div className="text-[9px] font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded flex items-center gap-2">
                                         {role.code}
                                       </div>
                                     </div>
@@ -209,11 +308,12 @@ export const TeamView: React.FC<TeamViewProps> = ({ teams, employees, assets, ro
                                       {renderHardwareStatus(role, occupant)}
                                     </div>
                                   </div>
-                                );
+                                ));
                               })}
-                            </div>
-                          )}
-                        </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     );
                   })}

@@ -34,8 +34,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ assets }) => {
   return (
     <div className="space-y-6">
       {/* Cards de Resumo */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="bg-white p-6 rounded-2xl shadow-card border border-slate-100 hover:-translate-y-1 hover:shadow-lg transition-all duration-300">
           <div className="flex justify-between items-start">
             <div>
               <p className="text-xs font-bold text-slate-400 uppercase">Total de Ativos</p>
@@ -45,7 +45,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ assets }) => {
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+        <div className="bg-white p-6 rounded-2xl shadow-card border border-slate-100 hover:-translate-y-1 hover:shadow-lg transition-all duration-300">
           <div className="flex justify-between items-start">
             <div>
               <p className="text-xs font-bold text-slate-400 uppercase">Valor Patrimonial</p>
@@ -55,7 +55,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ assets }) => {
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+        <div className="bg-white p-6 rounded-2xl shadow-card border border-slate-100 hover:-translate-y-1 hover:shadow-lg transition-all duration-300">
           <div className="flex justify-between items-start">
             <div>
               <p className="text-xs font-bold text-slate-400 uppercase">Em Estoque</p>
@@ -66,7 +66,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ assets }) => {
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+        <div className="bg-white p-6 rounded-2xl shadow-card border border-slate-100 hover:-translate-y-1 hover:shadow-lg transition-all duration-300">
           <div className="flex justify-between items-start">
             <div>
               <p className="text-xs font-bold text-slate-400 uppercase">Manutenção</p>
@@ -81,7 +81,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ assets }) => {
       {/* Gráficos */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Gráfico de Pizza - Distribuição */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-80">
+        <div className="bg-white p-6 rounded-2xl shadow-card border border-slate-100 h-80 hover:shadow-lg transition-all duration-300">
           <h4 className="font-bold text-slate-700 mb-4">Status Operacional</h4>
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
@@ -105,7 +105,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ assets }) => {
         </div>
 
         {/* Gráfico de Barras - Condição Física */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-80">
+        <div className="bg-white p-6 rounded-2xl shadow-card border border-slate-100 h-80 hover:shadow-lg transition-all duration-300">
           <h4 className="font-bold text-slate-700 mb-4">Integridade da Frota</h4>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={conditionData}>
@@ -119,8 +119,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ assets }) => {
       </div>
 
       {/* Lista Recente Rápida */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="bg-slate-50 p-4 border-b border-slate-200">
+      <div className="bg-white rounded-2xl shadow-card border border-slate-100 overflow-hidden hover:shadow-lg transition-all duration-300">
+        <div className="bg-slate-50/50 p-5 border-b border-slate-100">
           <h4 className="font-bold text-slate-700">Últimas Adições ao Inventário</h4>
         </div>
         <table className="min-w-full divide-y divide-slate-200">
@@ -133,8 +133,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ assets }) => {
                       {asset.type === 'CELULAR' ? <Smartphone size={16}/> : <Monitor size={16}/>}
                     </div>
                     <div className="ml-4">
-                      {/* AQUI ESTAVA O ERRO: asset.model foi removido. Substituído por brand + type */}
-                      <div className="text-sm font-bold text-slate-900">{asset.brand} {asset.type}</div>
+                      <div className="text-sm font-bold text-slate-900">
+                        {asset.brand && !['genérica', 'sem marca'].includes(asset.brand.toLowerCase()) ? `${asset.brand} ` : ''}
+                        {asset.type}
+                      </div>
                       <div className="text-xs text-slate-500">{asset.primaryId}</div>
                     </div>
                   </div>

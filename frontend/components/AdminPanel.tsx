@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Asset, Channel, Employee, OwnerType, Team, Role } from '../types';
-import { PlusCircle, Users, Briefcase, Monitor, Trash2, Edit, X, MapPin, Package, UploadCloud } from 'lucide-react';
+import { Package, Search, PlusCircle, Monitor, Users, Briefcase, X, Edit, Trash2, MapPin, ChevronDown } from 'lucide-react';
 import { STOCK_OWNER_ID, STOCK_OWNER_NAME } from '../constants';
-import { DataImporter } from './DataImporter';
 import { supabase } from '../lib/supabase';
 
 interface AdminPanelProps {
@@ -11,15 +10,19 @@ interface AdminPanelProps {
   onAddEmployee: (e: Employee) => void; onUpdateEmployee: (e: Employee) => void; onDeleteEmployee: (id: string) => void;
   onAddTeam: (t: Team) => void; onUpdateTeam: (t: Team) => void; onDeleteTeam: (id: string) => void;
   onAddRole: (r: Role) => void; onUpdateRole: (r: Role) => void; onDeleteRole: (id: string) => void;
+  searchQuery: string;
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = (props) => {
-  const [activeTab, setActiveTab] = useState<'ASSETS' | 'EMPLOYEES' | 'TEAMS' | 'ROLES' | 'IMPORT'>('ASSETS');
+  const [activeTab, setActiveTab] = useState<'ASSETS' | 'EMPLOYEES' | 'TEAMS' | 'ROLES'>('ASSETS');
   const [isEditing, setIsEditing] = useState(false);
   const [formState, setFormState] = useState<any>({});
   const [viewingAssets, setViewingAssets] = useState<Employee | null>(null);
+  
+  const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
+  const [roleSearch, setRoleSearch] = useState('');
 
-  const tabNames = { ASSETS: 'ATIVOS', EMPLOYEES: 'FUNCIONÁRIOS', TEAMS: 'EQUIPES', ROLES: 'VAGAS', IMPORT: 'IMPORTAÇÃO' };
+  const tabNames = { ASSETS: 'ATIVOS', EMPLOYEES: 'FUNCIONÁRIOS', TEAMS: 'EQUIPES', ROLES: 'VAGAS' };
   const ASSET_TYPES = ['NOTEBOOK', 'DESKTOP', 'CELULAR'];
   const ASSET_BRANDS = ['Samsung', 'Dell', 'Lenovo', 'Apple', 'HP', 'Motorola'];
   const ASSET_STATES = ['NOVO', 'USADO', 'QUEBRADO', 'COM DEFEITO'];
@@ -50,12 +53,31 @@ export const AdminPanel: React.FC<AdminPanelProps> = (props) => {
   };
 
   const handleRoleChange = (roleId: string) => {
-    const role = props.roles.find(r => r.id === roleId);
+    const role = props.roles.find(r => r.id.toString() === roleId.toString());
     setFormState({
       ...formState,
       roleId: roleId,
       region: role ? role.region : formState.region,
       teamId: role ? role.teamId : formState.teamId
+    });
+  };
+
+  const removeAccents = (str: string) => str.normalize('NFD').replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+  const filterRoles = (r: Role, search: string) => {
+    const searchTokens = removeAccents(search).split(/\s+/).filter(t => t);
+    if (searchTokens.length === 0) return true;
+
+    return searchTokens.every(token => {
+      const desc = removeAccents(r.description || '');
+      const code = removeAccents(r.code || '');
+      const region = removeAccents(r.region || '');
+      
+      const isGoias = (token.includes('goias') || token === 'go') && r.region === 'GO';
+      const isMatoGrosso = (token.includes('mato') || token.includes('grosso') || token === 'mt') && r.region === 'MT';
+      const isTocantins = (token.includes('tocantins') || token === 'to') && r.region === 'TO';
+      
+      return desc.includes(token) || code.includes(token) || region.includes(token) || isGoias || isMatoGrosso || isTocantins;
     });
   };
 
@@ -79,11 +101,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = (props) => {
     }
     
     if (activeTab === 'EMPLOYEES') {
-      const { roleId, ...dadosLimpos } = formState;
-      const selectedRole = props.roles.find(r => r.id === roleId);
-      const payload = { ...dadosLimpos, role: selectedRole ? selectedRole.description : formState.role };
-      if (formState.id) props.onUpdateEmployee(payload as Employee);
-      else props.onAddEmployee(payload as Employee);
+      const selectedRole = props.roles.find(r => r.id === formState.roleId);
+      const payload = { 
+        name: formState.name,
+        region: formState.region || 'Sem Região',
+        status: formState.status || 'Ativo',
+        role: selectedRole ? selectedRole.description : formState.role,
+        role_id: formState.roleId ? parseInt(formState.roleId) : null,
+        team_id: formState.teamId ? parseInt(formState.teamId) : null
+      };
+      if (formState.id) props.onUpdateEmployee({ id: formState.id, ...payload } as any);
+      else props.onAddEmployee(payload as any);
     }
     
     if (activeTab === 'TEAMS') {
@@ -143,9 +171,35 @@ export const AdminPanel: React.FC<AdminPanelProps> = (props) => {
   };
 
   const renderTable = () => {
-    if (activeTab === 'IMPORT') return null;
-    const data = activeTab === 'ASSETS' ? props.assets : activeTab === 'EMPLOYEES' ? props.employees : activeTab === 'TEAMS' ? props.teams : props.roles;
-    if (!data || data.length === 0) return <tbody><tr><td colSpan={3} className="p-12 text-center text-slate-400">Nenhum registro encontrado.</td></tr></tbody>;
+    let data: any[] = activeTab === 'ASSETS' ? props.assets : activeTab === 'EMPLOYEES' ? props.employees : activeTab === 'TEAMS' ? props.teams : props.roles;
+    
+    if (props.searchQuery) {
+      const lowerQuery = props.searchQuery.toLowerCase();
+      data = data.filter((item: any) => {
+        if (activeTab === 'ASSETS') {
+          return (item.assetTag || '').toLowerCase().includes(lowerQuery) || 
+                 (item.primaryId || '').toLowerCase().includes(lowerQuery) ||
+                 (item.brand || '').toLowerCase().includes(lowerQuery) ||
+                 (item.type || '').toLowerCase().includes(lowerQuery) ||
+                 (item.currentOwnerName || '').toLowerCase().includes(lowerQuery);
+        } else if (activeTab === 'EMPLOYEES') {
+          return (item.name || '').toLowerCase().includes(lowerQuery) ||
+                 (item.role || '').toLowerCase().includes(lowerQuery) ||
+                 (item.region || '').toLowerCase().includes(lowerQuery);
+        } else if (activeTab === 'TEAMS') {
+          return (item.name || '').toLowerCase().includes(lowerQuery) ||
+                 (item.region || '').toLowerCase().includes(lowerQuery) ||
+                 (item.channel || '').toLowerCase().includes(lowerQuery);
+        } else if (activeTab === 'ROLES') {
+          return (item.description || '').toLowerCase().includes(lowerQuery) ||
+                 (item.code || '').toLowerCase().includes(lowerQuery) ||
+                 (item.region || '').toLowerCase().includes(lowerQuery);
+        }
+        return false;
+      });
+    }
+
+    if (!data || data.length === 0) return <tbody><tr><td colSpan={3} className="p-12 text-center text-slate-400">Nenhum registro encontrado {props.searchQuery ? `para "${props.searchQuery}"` : ''}.</td></tr></tbody>;
 
     return (
       <tbody className="divide-y divide-slate-200">
@@ -153,7 +207,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = (props) => {
           <tr key={item.id} className="text-sm hover:bg-slate-50 transition-colors">
             <td className="px-6 py-4 font-bold text-slate-700">
               {activeTab === 'ASSETS' ? (
-                <div><div className="flex items-center gap-2"><span className="uppercase text-xs font-bold bg-slate-100 px-2 py-0.5 rounded">{item.type}</span> <span className="text-gsa-blue">{item.brand}</span></div><div className="text-sm font-black text-slate-800 mt-1">{item.assetTag || item.primaryId}</div>{item.assetTag && <div className="text-[10px] font-mono font-normal text-slate-400">S/N: {item.primaryId || 'N/A'}</div>}</div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="uppercase text-xs font-bold bg-slate-100 px-2 py-0.5 rounded">{item.type}</span> 
+                    {item.brand && !['genérica', 'sem marca'].includes(item.brand.toLowerCase()) && (
+                      <span className="text-gsa-blue">{item.brand}</span>
+                    )}
+                  </div>
+                  <div className="text-sm font-black text-slate-800 mt-1">{item.assetTag || item.primaryId}</div>
+                  {item.assetTag && <div className="text-[10px] font-mono font-normal text-slate-400">S/N: {item.primaryId || 'N/A'}</div>}
+                </div>
               )  : activeTab === 'ROLES' ? item.code : activeTab === 'EMPLOYEES' ? (
                  <div className="flex flex-col gap-1"><div className="font-bold text-slate-800">{item.name}</div><span className={`text-[10px] uppercase font-black px-2 py-0.5 rounded w-fit border ${item.status === 'Ativo' ? 'bg-green-100 text-green-700 border-green-200' : item.status === 'Desligado' ? 'bg-red-100 text-red-700 border-red-200' : 'bg-yellow-100 text-yellow-700 border-yellow-200'}`}>{item.status || 'Ativo'}</span></div>
               ) : item.name}
@@ -198,17 +261,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = (props) => {
           {id:'ASSETS',label:'Ativos',icon:Monitor},
           {id:'EMPLOYEES',label:'Funcionários',icon:Users},
           {id:'TEAMS',label:'Equipes',icon:Users},
-          {id:'ROLES',label:'Vagas',icon:Briefcase},
-          {id:'IMPORT',label:'Importar',icon:UploadCloud}
+          {id:'ROLES',label:'Vagas',icon:Briefcase}
         ].map(tab=>(
           <button key={tab.id} onClick={()=>setActiveTab(tab.id as any)} className={`flex items-center px-8 py-4 font-bold border-r border-slate-200 whitespace-nowrap transition-colors ${activeTab===tab.id ? 'bg-white text-gsa-blue border-b-2 border-b-gsa-blue' : 'text-slate-400 hover:bg-slate-100'}`}><tab.icon size={18} className="mr-2"/>{tab.label}</button>
         ))}
       </div>
       
       <div className="p-8 flex-1">
-        {activeTab === 'IMPORT' ? (
-           <DataImporter onSuccess={() => { alert('Importação concluída!'); setActiveTab('ASSETS'); }}/>
-        ) : !isEditing ? (
+        {!isEditing ? (
           <>
             <div className="flex justify-between items-center mb-6"><h2 className="text-xl font-black uppercase text-slate-800">Gerenciar {tabNames[activeTab]}</h2><button onClick={startCreate} className="bg-gsa-blue text-white px-6 py-2.5 rounded-lg font-bold flex items-center shadow hover:bg-blue-700 transition-all"><PlusCircle size={18} className="mr-2"/> Adicionar</button></div>
             <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm"><table className="min-w-full divide-y divide-slate-200"><thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-400"><tr><th className="px-6 py-3 text-left">Item</th><th className="px-6 py-3 text-left">Detalhes</th><th className="px-6 py-3 text-right">Ações</th></tr></thead>
@@ -237,13 +297,67 @@ export const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                 <div className="md:col-span-2"><label className={LabelClass}>Nome Completo</label><input required className={InputClass} value={formState.name || ''} onChange={e => setFormState({...formState, name: e.target.value})} /></div>
                 <div className="md:col-span-2">
                   <label className={LabelClass}>Vaga (Define Região e Equipe)</label>
-                  <select required className={InputClass} value={formState.roleId || ''} onChange={e => handleRoleChange(e.target.value)}>
-                    <option value="">Selecione...</option>
-                    {props.roles.map(r => <option key={r.id} value={r.id}>[{r.region}] {r.code} - {r.description}</option>)}
-                  </select>
-                  <div className="mt-2 flex gap-4 text-xs font-bold text-slate-500 bg-slate-100 p-2 rounded">
+                  
+                  <div className="relative mt-1">
+                    <div 
+                      className={`${InputClass} flex items-center justify-between cursor-pointer !mt-0`}
+                      onClick={() => setIsRoleDropdownOpen(!isRoleDropdownOpen)}
+                    >
+                      <span className={formState.roleId ? 'text-slate-800' : 'text-slate-400'}>
+                        {formState.roleId 
+                          ? (() => {
+                              const r = props.roles.find(x => x.id?.toString() === formState.roleId?.toString());
+                              return r ? `[${r.region}] ${r.code} - ${r.description}` : 'Selecione a vaga...';
+                            })() 
+                          : 'Selecione a vaga...'}
+                      </span>
+                      <ChevronDown size={16} className={`text-slate-400 transition-transform ${isRoleDropdownOpen ? 'rotate-180' : ''}`} />
+                    </div>
+                    
+                    {isRoleDropdownOpen && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setIsRoleDropdownOpen(false)}></div>
+                        <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-xl max-h-60 flex flex-col overflow-hidden">
+                          <div className="p-2 border-b border-slate-100 bg-slate-50">
+                            <input 
+                              autoFocus
+                              className="w-full bg-white border border-slate-200 rounded p-2 text-sm outline-none focus:border-gsa-blue shadow-sm" 
+                              placeholder="Pesquisar vaga, região ou código..." 
+                              value={roleSearch} 
+                              onChange={e => setRoleSearch(e.target.value)} 
+                            />
+                          </div>
+                          <div className="overflow-y-auto p-1 bg-white">
+                            {props.roles
+                              .filter(r => filterRoles(r, roleSearch))
+                              .map(r => (
+                                <div 
+                                  key={r.id} 
+                                  className={`p-2 cursor-pointer hover:bg-blue-50 rounded text-sm transition-colors ${formState.roleId?.toString() === r.id?.toString() ? 'bg-blue-50 text-gsa-blue font-bold' : 'text-slate-700'}`}
+                                  onClick={() => {
+                                    handleRoleChange(r.id.toString());
+                                    setIsRoleDropdownOpen(false);
+                                    setRoleSearch('');
+                                  }}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[10px] bg-slate-100 text-slate-500 font-bold px-1.5 py-0.5 rounded uppercase">{r.region}</span>
+                                    <span>{r.code} - {r.description}</span>
+                                  </div>
+                                </div>
+                              ))}
+                              {props.roles.filter(r => filterRoles(r, roleSearch)).length === 0 && (
+                                <div className="p-4 text-center text-sm text-slate-400">Nenhuma vaga encontrada.</div>
+                              )}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="mt-3 flex gap-4 text-xs font-bold text-slate-500 bg-slate-100 p-2.5 rounded-lg border border-slate-200">
                     <span>📍 Região: <span className="text-gsa-blue">{formState.region || '-'}</span></span>
-                    <span>👥 Equipe: <span className="text-gsa-blue">{props.teams.find(t => t.id === formState.teamId)?.name || 'Nenhuma/Avulsa'}</span></span>
+                    <span>👥 Equipe: <span className="text-gsa-blue">{props.teams.find(t => t.id?.toString() === formState.teamId?.toString())?.name || 'Nenhuma/Avulsa'}</span></span>
                   </div>
                 </div>
                 <div className="mt-6">

@@ -77,7 +77,7 @@ export interface Movement {
   reason: string; observations?: string; registeredBy: string;
 }
 
-export type ViewState = 'DASHBOARD' | 'ASSETS' | 'MOVEMENTS' | 'DETAILS' | 'ADMIN' | 'TEAMS';
+export type ViewState = 'DASHBOARD' | 'ASSETS' | 'MOVEMENTS' | 'DETAILS' | 'ADMIN' | 'TEAMS' | 'FAST_MOVE';
 
 // --- TIPOS PARA AUDITORIA ---
 export type LogAction = 'CREATE' | 'UPDATE' | 'DELETE' | 'MOVE' | 'IMPORT' | 'STATUS';

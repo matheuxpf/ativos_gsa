@@ -9,7 +9,8 @@ import {
   Box,
   LogOut,
   Settings,
-  Users
+  Users,
+  Zap
 } from 'lucide-react';
 import { ViewState } from '../types';
 
@@ -30,28 +31,33 @@ export const Layout: React.FC<LayoutProps> = ({
 }) => {
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
 
-  const NavItem = ({ view, icon: Icon, label }: { view: ViewState, icon: any, label: string }) => (
-    <button
-      onClick={() => {
-        onNavigate(view);
-        setIsSidebarOpen(false);
-      }}
-      className={`flex items-center w-full px-4 py-3 mb-2 rounded-lg transition-colors duration-200 ${
-        currentView === view 
-          ? 'bg-gsa-green text-white shadow-md font-semibold' 
-          : 'text-blue-100 hover:bg-gsa-darkBlue hover:text-white'
-      }`}
-    >
-      <Icon size={20} className="mr-3" />
-      <span>{label}</span>
-    </button>
-  );
+  const NavItem = ({ view, icon: Icon, label, highlight = false }: { view: ViewState, icon: any, label: string, highlight?: boolean }) => {
+    const isActive = currentView === view;
+    return (
+      <button
+        onClick={() => {
+          onNavigate(view);
+          setIsSidebarOpen(false);
+        }}
+        className={`flex items-center w-full px-4 py-3 mb-2 rounded-xl transition-all duration-300 ${
+          isActive 
+            ? 'bg-gradient-to-r from-gsa-green to-gsa-lightGreen text-white shadow-glow font-medium translate-x-1' 
+            : highlight
+              ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-md hover:from-blue-500 hover:to-blue-400 font-bold border border-blue-400/50 hover:-translate-y-0.5'
+              : 'text-blue-100 hover:bg-white/10 hover:text-white hover:translate-x-1'
+        }`}
+      >
+        <Icon size={20} className="mr-3" />
+        <span>{label}</span>
+      </button>
+    );
+  };
 
   return (
     <div className="flex h-screen bg-slate-100 overflow-hidden">
       {/* Sidebar - Desktop */}
-      <aside className="hidden md:flex flex-col w-64 bg-gsa-blue text-white shadow-xl z-20">
-        <div className="p-6 flex items-center justify-center border-b border-blue-800">
+      <aside className="hidden md:flex flex-col w-64 bg-gradient-to-b from-gsa-deepNight to-gsa-blue text-white shadow-glass z-20">
+        <div className="p-6 flex items-center justify-center border-b border-white/10">
            {/* Placeholder for GSA Logo */}
            <div className="flex items-center gap-2">
             <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-gsa-blue font-bold text-xl border-2 border-gsa-green">
@@ -67,17 +73,18 @@ export const Layout: React.FC<LayoutProps> = ({
         <nav className="flex-1 p-4 mt-4">
           <NavItem view="DASHBOARD" icon={LayoutDashboard} label="Dashboard" />
           <NavItem view="ASSETS" icon={Package} label="Ativos" />
+          <NavItem view="FAST_MOVE" icon={Zap} label="Movimentação Rápida" highlight={true} />
           <NavItem view="MOVEMENTS" icon={ClipboardList} label="Auditoria & Logs" />
           <NavItem view="TEAMS" icon={Users} label="Equipes" />
           <NavItem view="ADMIN" icon={Settings} label="Administração" />
         </nav>
 
-        <div className="p-4 border-t border-blue-800">
-          <div className="flex items-center text-sm text-blue-200 mb-2">
+        <div className="p-4 border-t border-white/10">
+          <div className="flex items-center text-sm text-blue-200 mb-2 opacity-70">
             <Box size={16} className="mr-2" />
             <span>Versão 1.0.0</span>
           </div>
-          <button className="flex items-center text-sm text-red-300 hover:text-red-100 transition-colors">
+          <button className="flex items-center text-sm text-red-300 hover:text-red-100 transition-colors w-full p-2 rounded-lg hover:bg-white/5">
             <LogOut size={16} className="mr-2" />
             Sair
           </button>
@@ -90,14 +97,15 @@ export const Layout: React.FC<LayoutProps> = ({
       )}
       
       {/* Mobile Sidebar */}
-      <aside className={`fixed inset-y-0 left-0 w-64 bg-gsa-blue text-white transform transition-transform duration-300 z-40 md:hidden ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="p-6 flex items-center justify-between border-b border-blue-800">
+      <aside className={`fixed inset-y-0 left-0 w-64 bg-gradient-to-b from-gsa-deepNight to-gsa-blue text-white transform transition-transform duration-300 z-40 md:hidden ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="p-6 flex items-center justify-between border-b border-white/10">
            <span className="font-bold text-lg">Menu</span>
            <button onClick={() => setIsSidebarOpen(false)} className="text-white">X</button>
         </div>
         <nav className="p-4 mt-2">
           <NavItem view="DASHBOARD" icon={LayoutDashboard} label="Dashboard" />
           <NavItem view="ASSETS" icon={Package} label="Ativos" />
+          <NavItem view="FAST_MOVE" icon={Zap} label="Movimentação Rápida" highlight={true} />
           <NavItem view="MOVEMENTS" icon={ClipboardList} label="Auditoria & Logs" />
           <NavItem view="TEAMS" icon={Users} label="Equipes" />
           <NavItem view="ADMIN" icon={Settings} label="Administração" />
@@ -105,9 +113,9 @@ export const Layout: React.FC<LayoutProps> = ({
       </aside>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col h-screen overflow-hidden">
+      <div className="flex-1 flex flex-col h-screen overflow-hidden bg-slate-50">
         {/* Header */}
-        <header className="bg-white shadow-sm h-16 flex items-center justify-between px-6 z-10">
+        <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 h-16 flex items-center justify-between px-6 z-10">
           <div className="flex items-center">
             <button 
               className="md:hidden mr-4 text-slate-600"
@@ -118,6 +126,7 @@ export const Layout: React.FC<LayoutProps> = ({
             <h1 className="text-xl font-bold text-slate-800 hidden sm:block">
               {currentView === 'DASHBOARD' && 'Visão Geral'}
               {currentView === 'ASSETS' && 'Controle de Ativos'}
+              {currentView === 'FAST_MOVE' && 'Movimentação Rápida'}
               {currentView === 'MOVEMENTS' && 'Auditoria & Logs'}
               {currentView === 'TEAMS' && 'Equipes Regionais'}
               {currentView === 'DETAILS' && 'Detalhes do Ativo'}
@@ -130,7 +139,7 @@ export const Layout: React.FC<LayoutProps> = ({
                <input 
                   type="text"
                   placeholder="Buscar por IMEI, Serial, Tag ou Responsável..."
-                  className="w-full pl-10 pr-4 py-2 rounded-full border border-slate-300 focus:outline-none focus:ring-2 focus:ring-gsa-green focus:border-transparent text-sm"
+                  className="w-full pl-10 pr-4 py-2 rounded-full border border-slate-200 bg-slate-100/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-gsa-green/50 focus:border-gsa-green transition-all duration-300 text-sm shadow-sm"
                   value={searchValue}
                   onChange={(e) => onSearch(e.target.value)}
                />

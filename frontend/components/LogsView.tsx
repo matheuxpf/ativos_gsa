@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { getAuditLogs } from '../lib/api';
 import { AuditLog } from '../types';
 import { 
   PlusCircle, Edit, Trash2, ArrowRightLeft, UploadCloud, 
@@ -18,13 +18,16 @@ export const LogsView: React.FC = () => {
 
   const fetchLogs = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('audit_logs')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(100); // Traz os últimos 100 para não pesar
-    
-    if (!error && data) setLogs(data as AuditLog[]);
+    try {
+      const data = await getAuditLogs();
+      // Sort by created_at descending and limit to 200
+      const sorted = (data || []).sort((a: any, b: any) => 
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      ).slice(0, 200);
+      setLogs(sorted as AuditLog[]);
+    } catch (err) {
+      console.error('Erro ao carregar logs:', err);
+    }
     setLoading(false);
   };
 
