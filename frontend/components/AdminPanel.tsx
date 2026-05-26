@@ -101,7 +101,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = (props) => {
     }
     
     if (activeTab === 'EMPLOYEES') {
-      const selectedRole = props.roles.find(r => r.id === formState.roleId);
+      const selectedRole = props.roles.find(r => r.id?.toString() === formState.roleId?.toString());
       const payload = { 
         name: formState.name,
         region: formState.region || 'Sem Região',
